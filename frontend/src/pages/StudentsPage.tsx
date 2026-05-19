@@ -240,6 +240,8 @@ export const StudentsPage = () => {
   const togglePaymentFromTable = async (row: StudentRow) => {
     if (!token || !isAdmin || togglingEnrollmentId) return;
     const nextIsPaid = !row.is_paid;
+    const normalizedAmount = Number(row.payment_amount ?? 125);
+    const paymentAmount = Number.isFinite(normalizedAmount) ? normalizedAmount : 125;
     setTogglingEnrollmentId(row.enrollment_id);
 
     // Optimistic UI update keeps the list responsive while the API call is in flight.
@@ -254,7 +256,7 @@ export const StudentsPage = () => {
         method: 'PATCH',
         body: JSON.stringify({
           isPaid: nextIsPaid,
-          paymentAmount: row.payment_amount ?? 125,
+          paymentAmount,
           paymentNote: row.payment_note || undefined,
           paidOn: nextIsPaid ? (row.paid_at ? toDateInputValue(row.paid_at) : undefined) : undefined
         })
