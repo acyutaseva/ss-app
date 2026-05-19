@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS students (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   submission_date TIMESTAMPTZ,
   full_name TEXT NOT NULL,
+  gender TEXT CHECK (gender IN ('boy', 'girl')),
   date_of_birth DATE,
   father_name TEXT,
   mother_name TEXT,
@@ -64,6 +65,15 @@ CREATE TABLE IF NOT EXISTS students (
   medical_needs_or_allergies TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE students
+  ADD COLUMN IF NOT EXISTS gender TEXT;
+
+ALTER TABLE students
+  DROP CONSTRAINT IF EXISTS students_gender_check;
+
+ALTER TABLE students
+  ADD CONSTRAINT students_gender_check CHECK (gender IN ('boy', 'girl'));
 
 CREATE TABLE IF NOT EXISTS academic_years (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

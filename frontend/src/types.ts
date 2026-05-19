@@ -10,6 +10,7 @@ export type User = {
 export type Student = {
   id: string;
   full_name: string;
+  gender?: 'boy' | 'girl' | null;
   group_id?: string;
   group_name: string;
   date_of_birth?: string | null;

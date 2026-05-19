@@ -8,6 +8,7 @@ type SchoolYear = { id: string; name: string };
 type StudentRow = {
   id: string;
   full_name: string;
+  gender?: 'boy' | 'girl' | null;
   date_of_birth?: string | null;
   father_name?: string | null;
   mother_name?: string | null;
@@ -41,6 +42,7 @@ type EditStudentState = {
   id: string;
   enrollmentId: string;
   fullName: string;
+  gender: 'boy' | 'girl' | '';
   dateOfBirth: string;
   fatherName: string;
   motherName: string;
@@ -88,6 +90,7 @@ const toEditStudent = (r: StudentRow): EditStudentState => ({
   id: r.id,
   enrollmentId: r.enrollment_id,
   fullName: r.full_name,
+  gender: r.gender || '',
   dateOfBirth: toDateInputValue(r.date_of_birth),
   fatherName: r.father_name || '',
   motherName: r.mother_name || '',
@@ -123,6 +126,7 @@ export const StudentsPage = () => {
   const [showAddStudent, setShowAddStudent] = useState(false);
   const [addStudentForm, setAddStudentForm] = useState({
     fullName: '',
+    gender: '',
     dateOfBirth: '',
     fatherName: '',
     motherName: '',
@@ -326,12 +330,14 @@ export const StudentsPage = () => {
       body: JSON.stringify({
         ...addStudentForm,
         fullName,
+        gender: addStudentForm.gender || undefined,
         groupId: computedGroupId
       })
     }, token);
     setShowAddStudent(false);
     setAddStudentForm({
       fullName: '',
+      gender: '',
       dateOfBirth: '',
       fatherName: '',
       motherName: '',
@@ -398,6 +404,7 @@ export const StudentsPage = () => {
           <thead>
             <tr>
               <th>Student</th>
+              <th>Gender</th>
               <th>Group</th>
               <th>School Year</th>
               <th>Payment</th>
@@ -409,6 +416,7 @@ export const StudentsPage = () => {
             {rows.map((r) => (
               <tr key={r.enrollment_id} className={r.is_paid ? 'student-row paid-row' : 'student-row unpaid-row'}>
                 <td>{r.full_name}</td>
+                <td>{r.gender ? (r.gender === 'boy' ? 'Boy' : 'Girl') : '-'}</td>
                 <td>{r.group_name}</td>
                 <td>{r.school_year_name}</td>
                 <td>
@@ -455,6 +463,7 @@ export const StudentsPage = () => {
             <article className={`card student ${r.is_paid ? 'paid-row' : 'unpaid-row'}`} key={`${r.enrollment_id}-mobile`}>
               <div>
                 <h3>{r.full_name}</h3>
+                <p>{r.gender ? (r.gender === 'boy' ? 'Boy' : 'Girl') : '-'}</p>
                 <p>{r.group_name}</p>
                 <p>{r.school_year_name}</p>
               </div>
@@ -520,6 +529,14 @@ export const StudentsPage = () => {
                   <label className="field">
                     <span className="field-label">Date of Birth</span>
                     <input type="date" value={editStudent.dateOfBirth} onChange={(e) => setEditStudent((v) => v ? { ...v, dateOfBirth: e.target.value } : v)} />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">Gender</span>
+                    <select value={editStudent.gender} onChange={(e) => setEditStudent((v) => v ? { ...v, gender: e.target.value as 'boy' | 'girl' | '' } : v)}>
+                      <option value="">Select gender</option>
+                      <option value="boy">Boy</option>
+                      <option value="girl">Girl</option>
+                    </select>
                   </label>
                   <label className="field">
                     <span className="field-label">Father Name</span>
@@ -682,6 +699,14 @@ export const StudentsPage = () => {
               <label className="field">
                 <span className="field-label">Date of Birth</span>
                 <input type="date" value={addStudentForm.dateOfBirth} onChange={(e) => setAddStudentForm((v) => ({ ...v, dateOfBirth: e.target.value }))} />
+              </label>
+              <label className="field">
+                <span className="field-label">Gender</span>
+                <select value={addStudentForm.gender} onChange={(e) => setAddStudentForm((v) => ({ ...v, gender: e.target.value }))}>
+                  <option value="">Select gender</option>
+                  <option value="boy">Boy</option>
+                  <option value="girl">Girl</option>
+                </select>
               </label>
               <label className="field">
                 <span className="field-label">Father Name</span>

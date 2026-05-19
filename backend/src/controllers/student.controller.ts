@@ -84,6 +84,7 @@ export const listStudentsHandler = async (req: Request, res: Response) => {
     SELECT
       s.id,
       s.full_name,
+      s.gender,
       s.date_of_birth,
       s.father_name,
       s.mother_name,

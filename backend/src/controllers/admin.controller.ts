@@ -10,6 +10,7 @@ const createStudentSchema = z.object({
   fullName: z.string().min(2).max(140),
   submissionDate: z.string().optional(),
   schoolYearId: z.string().uuid(),
+  gender: z.enum(['boy', 'girl']).optional(),
   dateOfBirth: z.string().optional(),
   groupId: z.string().uuid(),
   fatherName: z.string().max(140).optional(),
@@ -74,6 +75,7 @@ const updateUserSchema = z.object({
 
 const updateStudentSchema = z.object({
   fullName: z.string().min(2).max(140),
+  gender: z.enum(['boy', 'girl']).optional(),
   dateOfBirth: z.string().optional(),
   fatherName: z.string().max(140).optional(),
   motherName: z.string().max(140).optional(),
@@ -110,9 +112,9 @@ export const createStudentHandler = async (req: Request, res: Response) => {
     const studentResult = await client.query(
       `INSERT INTO students (
       submission_date, full_name, date_of_birth, father_name, mother_name,
-      mobile_number, email, current_address, hobbies_or_interests, medical_needs_or_allergies
+      mobile_number, email, current_address, hobbies_or_interests, medical_needs_or_allergies, gender
     )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING id, full_name`,
       [
         d.submissionDate || null,
@@ -124,7 +126,8 @@ export const createStudentHandler = async (req: Request, res: Response) => {
         d.email || null,
         d.currentAddress || null,
         d.hobbiesOrInterests || null,
-        d.medicalNeedsOrAllergies || null
+        d.medicalNeedsOrAllergies || null,
+        d.gender || null
       ]
     );
 
@@ -532,17 +535,19 @@ export const updateStudentHandler = async (req: Request, res: Response) => {
     await client.query(
       `UPDATE students
        SET full_name = $1,
-           date_of_birth = $2,
-           father_name = $3,
-           mother_name = $4,
-           mobile_number = $5,
-           email = $6,
-           current_address = $7,
-           hobbies_or_interests = $8,
-           medical_needs_or_allergies = $9
-       WHERE id = $10`,
+           gender = $2,
+           date_of_birth = $3,
+           father_name = $4,
+           mother_name = $5,
+           mobile_number = $6,
+           email = $7,
+           current_address = $8,
+           hobbies_or_interests = $9,
+           medical_needs_or_allergies = $10
+       WHERE id = $11`,
       [
         d.fullName,
+        d.gender || null,
         d.dateOfBirth || null,
         d.fatherName || null,
         d.motherName || null,
