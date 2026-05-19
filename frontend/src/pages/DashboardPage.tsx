@@ -48,7 +48,7 @@ const formatBirthday = (value: string) => {
 
 const formatDateOnly = (value: string) => value?.includes('T') ? value.split('T')[0] : value;
 const formatTimeOnly = (value: string) => value?.slice(0, 5) || value;
-const formatAudAmount = (value: number) => `AUD ${value.toFixed(2)}`;
+const formatAudAmount = (value: number) => value.toFixed(2);
 
 export const DashboardPage = () => {
   const { token } = useAuth();
@@ -162,7 +162,7 @@ export const DashboardPage = () => {
           <div className="payment-sub-grid" style={{ marginTop: 10 }}>
             <div className="card"><p className="eyebrow">Paid</p><h2>{summary.paidStudents}</h2></div>
             <div className="card"><p className="eyebrow">Unpaid</p><h2>{summary.unpaidStudents}</h2></div>
-            <div className="card"><p className="eyebrow">Received</p><h2>{formatAudAmount(summary.totalPaymentReceived || 0)}</h2></div>
+            <div className="card"><p className="eyebrow">Received</p><h2><span className="aud-amount"><span className="aud-prefix">AUD</span> {formatAudAmount(summary.totalPaymentReceived || 0)}</span></h2></div>
           </div>
         </div>
 

@@ -233,6 +233,21 @@ textarea { min-height: 86px; resize: vertical; }
 .login-actions-row { display: grid; gap: 8px; grid-template-columns: 1fr; }
 .error { color: var(--danger); }
 .ok { color: var(--ok); margin-top: 8px; }
+.aud-prefix {
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  vertical-align: inherit;
+}
+.aud-amount {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35em;
+  white-space: nowrap;
+  font-size: 0.58em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
 
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align:left; padding: 10px 6px; border-bottom: 1px solid var(--line); }
