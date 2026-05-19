@@ -49,7 +49,8 @@ const rolloverSchema = z.object({
 const updatePaymentSchema = z.object({
   isPaid: z.boolean(),
   paymentNote: z.string().max(500).optional(),
-  paidOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
+  paidOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  paymentAmount: z.number().min(0).max(1000000).optional()
 });
 
 const createUserSchema = z.object({
@@ -264,8 +265,8 @@ export const rolloverAcademicYearHandler = async (req: Request, res: Response) =
       'SELECT id, year_label FROM academic_years WHERE year_label = ANY($1::text[])',
       [[fromYearLabel, toYearLabel]]
     );
-    const fromYear = years.rows.find((r) => r.year_label === fromYearLabel);
-    const toYear = years.rows.find((r) => r.year_label === toYearLabel);
+    const fromYear = years.rows.find((r: { year_label: string; id: string }) => r.year_label === fromYearLabel);
+    const toYear = years.rows.find((r: { year_label: string; id: string }) => r.year_label === toYearLabel);
     if (!fromYear || !toYear) {
       await client.query('ROLLBACK');
       return res.status(400).json({ message: 'Both academic years must exist' });
@@ -323,10 +324,11 @@ export const updateEnrollmentPaymentHandler = async (req: Request, res: Response
      SET
        is_paid = $1,
        paid_at = CASE WHEN $1 THEN COALESCE(($3::date)::timestamp, NOW()) ELSE NULL END,
-       payment_note = $2
-     WHERE id = $4
-     RETURNING id, is_paid, paid_at, payment_note`,
-    [d.isPaid, d.paymentNote || null, d.paidOn || null, enrollmentId]
+       payment_note = $2,
+       payment_amount = COALESCE($4, payment_amount)
+     WHERE id = $5
+     RETURNING id, is_paid, paid_at, payment_note, payment_amount`,
+    [d.isPaid, d.paymentNote || null, d.paidOn || null, d.paymentAmount ?? null, enrollmentId]
   );
 
   if (!result.rowCount) return res.status(404).json({ message: 'Enrollment not found' });

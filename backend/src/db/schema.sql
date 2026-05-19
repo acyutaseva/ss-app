@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS student_enrollments (
   group_id UUID NOT NULL REFERENCES groups(id),
   school_year_id UUID NOT NULL REFERENCES school_years(id),
   is_paid BOOLEAN NOT NULL DEFAULT false,
+  payment_amount NUMERIC(10,2) NOT NULL DEFAULT 125,
   paid_at TIMESTAMPTZ,
   payment_note TEXT,
   status TEXT NOT NULL CHECK (status IN ('active', 'archived', 'left')) DEFAULT 'active',
@@ -85,6 +86,13 @@ CREATE TABLE IF NOT EXISTS student_enrollments (
     REFERENCES group_school_years(group_id, school_year_id),
   UNIQUE (student_id, academic_year_id)
 );
+
+ALTER TABLE student_enrollments
+  ADD COLUMN IF NOT EXISTS payment_amount NUMERIC(10,2) NOT NULL DEFAULT 125;
+
+UPDATE student_enrollments
+SET payment_amount = 125
+WHERE payment_amount IS NULL;
 
 CREATE TABLE IF NOT EXISTS guardians (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

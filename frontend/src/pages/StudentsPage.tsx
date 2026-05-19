@@ -24,6 +24,7 @@ type StudentRow = {
   school_year_name: string;
   academic_year: string;
   is_paid: boolean;
+  payment_amount?: number | null;
   paid_at?: string | null;
   payment_note?: string | null;
 };
@@ -52,6 +53,7 @@ type EditStudentState = {
   schoolYearId: string;
   status: 'active' | 'archived' | 'left';
   isPaid: boolean;
+  paymentAmount: number;
   paymentNote: string;
   paidOn: string;
 };
@@ -98,6 +100,7 @@ const toEditStudent = (r: StudentRow): EditStudentState => ({
   schoolYearId: r.school_year_id,
   status: r.status || 'active',
   isPaid: r.is_paid,
+  paymentAmount: Number(r.payment_amount ?? 125),
   paymentNote: r.payment_note || '',
   paidOn: toDateInputValue(r.paid_at)
 });
@@ -224,6 +227,7 @@ export const StudentsPage = () => {
       method: 'PATCH',
       body: JSON.stringify({
         isPaid: editStudent.isPaid,
+        paymentAmount: editStudent.paymentAmount,
         paymentNote: editStudent.paymentNote || undefined,
         paidOn: editStudent.isPaid ? (editStudent.paidOn || undefined) : undefined
       })
@@ -372,6 +376,7 @@ export const StudentsPage = () => {
                   <span className={r.is_paid ? 'payment-badge paid' : 'payment-badge unpaid'}>
                     {r.is_paid ? 'Paid' : '! Unpaid'}
                   </span>
+                  <p className="eyebrow">AUD {Number(r.payment_amount ?? 125).toFixed(2)}</p>
                 </td>
                 <td>
                   <div className="row wrap">
@@ -409,6 +414,7 @@ export const StudentsPage = () => {
                     {r.is_paid ? 'Paid' : '! Unpaid'}
                   </span>
                 </p>
+                <p className="eyebrow">AUD {Number(r.payment_amount ?? 125).toFixed(2)}</p>
                 {toDialPhone(r.mobile_number) && (
                   <a className="btn ghost contact-btn" href={`tel:${toDialPhone(r.mobile_number)}`}>Call</a>
                 )}
@@ -544,6 +550,16 @@ export const StudentsPage = () => {
                       value={editStudent.paidOn}
                       onChange={(e) => setEditStudent((v) => v ? { ...v, paidOn: e.target.value } : v)}
                       disabled={!editStudent.isPaid}
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">Amount (AUD)</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={editStudent.paymentAmount}
+                      onChange={(e) => setEditStudent((v) => v ? { ...v, paymentAmount: Number(e.target.value || 0) } : v)}
                     />
                   </label>
                   <label className="field field-span-2">

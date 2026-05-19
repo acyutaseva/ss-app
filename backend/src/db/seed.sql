@@ -1,9 +1,9 @@
 -- password: Admin@123
-INSERT INTO users (name, email, password_hash, role)
+INSERT INTO users (name, email, phone_number, password_hash, role)
 VALUES
-  ('System Admin', 'abhishekchouhan@gmail.com', crypt('Admin@123', gen_salt('bf', 10)), 'admin'),
-  ('Dayamai Saci', 'dayamai.saci@gmail.com', crypt('Admin@123', gen_salt('bf', 10)), 'admin'),
-  ('Acyuta Seva', 'acyuta.seva@gmail.com', crypt('Admin@123', gen_salt('bf', 10)), 'teacher')
+  ('System Admin', 'abhishekchouhan@gmail.com', '0470 758 214', crypt('Admin@123', gen_salt('bf', 10)), 'admin'),
+  ('Dayamai Saci', 'dayamai.saci@gmail.com', '0416 109 997', crypt('Admin@123', gen_salt('bf', 10)), 'admin'),
+  ('Acyuta Seva', 'acyuta.seva@gmail.com', '0470 758 214', crypt('Admin@123', gen_salt('bf', 10)), 'teacher')
 ON CONFLICT (email) DO UPDATE
 SET
   name = EXCLUDED.name,

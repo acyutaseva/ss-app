@@ -25,6 +25,7 @@ export const dashboardSummaryHandler = async (req: Request, res: Response) => {
   const totalStudentsSql = `SELECT COUNT(*)::int AS count ${baseFrom} ${baseWhere}`;
   const paidSql = `SELECT COUNT(*)::int AS count ${baseFrom} ${baseWhere} AND se.is_paid = true`;
   const unpaidSql = `SELECT COUNT(*)::int AS count ${baseFrom} ${baseWhere} AND se.is_paid = false`;
+  const totalPaymentSql = `SELECT COALESCE(SUM(se.payment_amount), 0)::numeric(12,2) AS total ${baseFrom} ${baseWhere} AND se.is_paid = true`;
 
   const todayAttendanceSql = `
     SELECT
@@ -55,10 +56,11 @@ export const dashboardSummaryHandler = async (req: Request, res: Response) => {
     ORDER BY EXTRACT(DAY FROM s.date_of_birth), s.full_name
   `;
 
-  const [totalStudents, paid, unpaid, todayAttendance, birthdaysThisMonth] = await Promise.all([
+  const [totalStudents, paid, unpaid, totalPayment, todayAttendance, birthdaysThisMonth] = await Promise.all([
     pool.query(totalStudentsSql, values),
     pool.query(paidSql, values),
     pool.query(unpaidSql, values),
+    pool.query(totalPaymentSql, values),
     pool.query(todayAttendanceSql, values),
     pool.query(birthdaysThisMonthSql, values)
   ]);
@@ -67,6 +69,7 @@ export const dashboardSummaryHandler = async (req: Request, res: Response) => {
     totalStudents: totalStudents.rows[0]?.count || 0,
     paidStudents: paid.rows[0]?.count || 0,
     unpaidStudents: unpaid.rows[0]?.count || 0,
+    totalPaymentReceived: Number(totalPayment.rows[0]?.total || 0),
     todayCheckedIn: todayAttendance.rows[0]?.checked_in || 0,
     todayCheckedOut: todayAttendance.rows[0]?.checked_out || 0,
     todayPendingPickup: todayAttendance.rows[0]?.pending_pickup || 0,

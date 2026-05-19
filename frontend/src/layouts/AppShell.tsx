@@ -13,7 +13,7 @@ export const AppShell = () => {
           <p className="eyebrow">Hare Krishan Sunday School</p>
           <h2>Student Management</h2>
         </div>
-        <p className="eyebrow">{user?.role === 'admin' ? 'Admin' : 'Teacher'} Login</p>
+        <p className="eyebrow">Role: {user?.role === 'admin' ? 'Admin' : 'Teacher'}</p>
       </header>
 
       <div className="app-shell">
@@ -22,8 +22,8 @@ export const AppShell = () => {
             <NavLink to="/" end className={navClass}>Dashboard</NavLink>
             {user?.role === 'admin' && <NavLink to="/students" className={navClass}>Students</NavLink>}
             {user?.role === 'admin' && <NavLink to="/volunteers" className={navClass}>Volunteers</NavLink>}
-            <NavLink to="/attendance" className={navClass}>Attendance</NavLink>
             {user?.role === 'admin' && <NavLink to="/events" className={navClass}>Events</NavLink>}
+            <NavLink to="/attendance" className={navClass}>Attendance</NavLink>
             {user?.role === 'admin' && <NavLink to="/admin" className={navClass}>Admin</NavLink>}
             {user?.role === 'admin' && <NavLink to="/reports" className={navClass}>Reports</NavLink>}
           </nav>

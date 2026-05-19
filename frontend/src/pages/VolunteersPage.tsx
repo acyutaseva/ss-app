@@ -39,6 +39,20 @@ type PasswordDialogState = {
   confirmPassword: string;
 };
 
+const toDialPhone = (value?: string | null) => {
+  if (!value) return '';
+  return value.replace(/[^\d+]/g, '');
+};
+
+const toWhatsAppPhone = (value?: string | null) => {
+  if (!value) return '';
+  const digits = value.replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('61')) return digits;
+  if (digits.startsWith('0')) return `61${digits.slice(1)}`;
+  return digits;
+};
+
 export const VolunteersPage = () => {
   const { token } = useAuth();
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -198,7 +212,17 @@ export const VolunteersPage = () => {
               <tr key={u.id}>
                 <td>{u.name}</td>
                 <td>{u.email}</td>
-                <td>{u.phone_number || '-'}</td>
+                <td>
+                  <div className="row wrap">
+                    {toDialPhone(u.phone_number) && (
+                      <a className="btn ghost contact-btn" href={`tel:${toDialPhone(u.phone_number)}`}>Call</a>
+                    )}
+                    {toWhatsAppPhone(u.phone_number) && (
+                      <a className="btn ghost contact-btn" href={`https://wa.me/${toWhatsAppPhone(u.phone_number)}`} target="_blank" rel="noreferrer">WhatsApp</a>
+                    )}
+                    {!toDialPhone(u.phone_number) && !toWhatsAppPhone(u.phone_number) && <span>-</span>}
+                  </div>
+                </td>
                 <td>{u.role}</td>
                 <td>
                   <span className={u.is_active ? 'payment-badge paid' : 'payment-badge unpaid'}>
@@ -255,6 +279,12 @@ export const VolunteersPage = () => {
                 <span className={u.is_active ? 'payment-badge paid' : 'payment-badge unpaid'}>
                   {u.is_active ? 'Active' : 'Inactive'}
                 </span>
+                {toDialPhone(u.phone_number) && (
+                  <a className="btn ghost contact-btn" href={`tel:${toDialPhone(u.phone_number)}`}>Call</a>
+                )}
+                {toWhatsAppPhone(u.phone_number) && (
+                  <a className="btn ghost contact-btn" href={`https://wa.me/${toWhatsAppPhone(u.phone_number)}`} target="_blank" rel="noreferrer">WhatsApp</a>
+                )}
                 <button className="btn ghost contact-btn edit-btn" onClick={() => setEditUser({
                   id: u.id,
                   name: u.name,

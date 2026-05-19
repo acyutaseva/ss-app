@@ -1,5 +1,5 @@
-import { createContext, useContext, useMemo, useState } from 'react';
-import { apiFetch } from '../services/api';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { apiFetch, SESSION_EXPIRED_EVENT } from '../services/api';
 import { User } from '../types';
 
 type AuthState = {
@@ -33,12 +33,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     localStorage.setItem(userKey, JSON.stringify(res.user));
   };
 
-  const logout = () => {
+  const logout = useCallback(() => {
     setToken(null);
     setUser(null);
     localStorage.removeItem(tokenKey);
     localStorage.removeItem(userKey);
-  };
+  }, []);
+
+  useEffect(() => {
+    const onSessionExpired = () => {
+      logout();
+      if (window.location.pathname !== '/login') {
+        window.location.assign('/login');
+      }
+    };
+
+    window.addEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
+  }, [logout]);
 
   const value = useMemo(() => ({ token, user, login, logout }), [token, user]);
 
