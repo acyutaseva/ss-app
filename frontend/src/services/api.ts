@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+const API_BASE = import.meta.env.VITE_BACKEND_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 export const SESSION_EXPIRED_EVENT = 'ss:session-expired';
 
 export const apiFetch = async <T>(path: string, options: RequestInit = {}, token?: string): Promise<T> => {
