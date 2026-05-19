@@ -35,7 +35,7 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction) => 
        WHERE id = $1 AND is_active = true
        LIMIT 1`,
       [payload.sub]
-    ).then((result) => {
+    ).then((result: any) => {
       const user = result.rows[0];
       if (!user) {
         return res.status(401).json({ message: 'Session expired. Please login again.' });
