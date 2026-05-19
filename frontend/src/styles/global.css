@@ -95,6 +95,24 @@ h1,h2,h3,p { margin: 0; }
 .row.wrap { flex-wrap: wrap; }
 .grid-list { display:grid; gap: 10px; }
 .student { display:flex; justify-content:space-between; align-items:center; }
+.student-name-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.student-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid #d6e0d2;
+  background: #f4f8f1;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.student-avatar-sm {
+  width: 24px;
+  height: 24px;
+}
 .student-interactive {
   cursor: pointer;
   border: 1px solid transparent;

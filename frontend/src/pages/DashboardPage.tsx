@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../services/api';
+import { getStudentAvatarUrl } from '../utils/studentAvatar';
 
 type Summary = {
   totalStudents: number;
@@ -197,7 +198,7 @@ export const DashboardPage = () => {
                 {summary.birthdaysThisMonth.map((s) => (
                   <div key={s.id} className="birthday-row">
                     <div>
-                      <strong>{s.full_name}</strong>
+                      <strong className="student-name-cell"><img className="student-avatar student-avatar-sm" src={getStudentAvatarUrl(s.id)} alt="Student avatar" loading="lazy" />{s.full_name}</strong>
                       <p className="eyebrow">{s.group_name}</p>
                     </div>
                     <span className="birthday-date">{formatBirthday(s.date_of_birth)}</span>

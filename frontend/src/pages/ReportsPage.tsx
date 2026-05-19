@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../services/api';
+import { getStudentAvatarUrl } from '../utils/studentAvatar';
 
 type TermRow = {
   student_id: string;
@@ -85,7 +86,7 @@ export const ReportsPage = () => {
           <tbody>
             {pageRows.map((row) => (
               <tr key={row.student_id}>
-                <td>{row.full_name}</td>
+                <td><span className="student-name-cell"><img className="student-avatar student-avatar-sm" src={getStudentAvatarUrl(row.student_id)} alt="Student avatar" loading="lazy" />{row.full_name}</span></td>
                 <td>{row.group_name}</td>
                 <td>{row.present_days}</td>
               </tr>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { getStudentAvatarUrl } from '../utils/studentAvatar';
 
 type Group = { id: string; name: string };
 type AcademicYear = { id: string; year_label: string; is_active: boolean };
@@ -430,7 +431,12 @@ export const StudentsPage = () => {
                 onClick={() => setViewStudent(r)}
                 style={{ cursor: 'pointer' }}
               >
-                <td>{r.full_name}</td>
+                <td>
+                  <div className="student-name-cell">
+                    <img className="student-avatar" src={getStudentAvatarUrl(r.id, r.gender)} alt="Student avatar" loading="lazy" />
+                    <span>{r.full_name}</span>
+                  </div>
+                </td>
                 <td>{r.gender ? (r.gender === 'boy' ? 'Boy' : 'Girl') : '-'}</td>
                 <td>{r.group_name}</td>
                 <td>{r.school_year_name}</td>
@@ -482,7 +488,7 @@ export const StudentsPage = () => {
               style={{ cursor: 'pointer' }}
             >
               <div>
-                <h3>{r.full_name}</h3>
+                <h3 className="student-name-cell"><img className="student-avatar student-avatar-sm" src={getStudentAvatarUrl(r.id, r.gender)} alt="Student avatar" loading="lazy" />{r.full_name}</h3>
                 <p>{r.gender ? (r.gender === 'boy' ? 'Boy' : 'Girl') : '-'}</p>
                 <p>{r.group_name}</p>
                 <p>{r.school_year_name}</p>
@@ -525,7 +531,10 @@ export const StudentsPage = () => {
       {viewStudent && (
         <div className="modal-backdrop" onClick={() => setViewStudent(null)}>
           <div className="modal-card student-modal-card" onClick={(e) => e.stopPropagation()}>
-            <h2>Student Details</h2>
+            <h2 className="student-name-cell">
+              <img className="student-avatar" src={getStudentAvatarUrl(viewStudent.id, viewStudent.gender)} alt="Student avatar" loading="lazy" />
+              Student Details
+            </h2>
             <div className="form-grid student-edit-grid">
               <label className="field">
                 <span className="field-label">Student Name</span>

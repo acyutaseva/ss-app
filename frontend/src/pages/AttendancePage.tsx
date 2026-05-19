@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../services/api';
 import { Student } from '../types';
+import { getStudentAvatarUrl } from '../utils/studentAvatar';
 
 type StudentsApiResponse = {
   items: Student[];
@@ -265,7 +266,10 @@ export const AttendancePage = () => {
         {filteredStudents.map((student) => (
           <article className="card student" key={student.id}>
             <div className="student-interactive" onClick={() => setSelectedStudent(student)}>
-              <h3 title={student.full_name}>{shortenName(student.full_name, 15)}</h3>
+              <h3 className="student-name-cell" title={student.full_name}>
+                <img className="student-avatar student-avatar-sm" src={getStudentAvatarUrl(student.id, student.gender)} alt="Student avatar" loading="lazy" />
+                {shortenName(student.full_name, 15)}
+              </h3>
               <p>{student.group_name}</p>
               <p className="student-interactive-hint">View details</p>
             </div>
@@ -294,7 +298,10 @@ export const AttendancePage = () => {
       {selectedStudent && (
         <div className="modal-backdrop" onClick={() => setSelectedStudent(null)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h2>Student Details</h2>
+            <h2 className="student-name-cell">
+              <img className="student-avatar" src={getStudentAvatarUrl(selectedStudent.id, selectedStudent.gender)} alt="Student avatar" loading="lazy" />
+              Student Details
+            </h2>
             <div className="form-grid" style={{ marginTop: 10 }}>
               <p><strong>Name:</strong> {selectedStudent.full_name}</p>
               <p><strong>Group:</strong> {selectedStudent.group_name || '-'}</p>
