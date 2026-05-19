@@ -7,6 +7,7 @@ const eventSchema = z.object({
   eventDate: z.string(),
   startTime: z.string(),
   endTime: z.string(),
+  attendanceMode: z.enum(['full', 'checkin_only']).default('full'),
   notes: z.string().max(1000).optional()
 });
 
@@ -14,7 +15,7 @@ const updateEventSchema = eventSchema.partial();
 
 export const listEventsHandler = async (req: Request, res: Response) => {
   const mode = String(req.query.mode || '').trim();
-  let sql = `SELECT id, name, event_date, start_time, end_time, notes FROM events`;
+  let sql = `SELECT id, name, event_date, start_time, end_time, attendance_mode, notes FROM events`;
   const values: string[] = [];
 
   if (mode === 'attendance' && req.user?.role === 'teacher') {
@@ -32,10 +33,10 @@ export const createEventHandler = async (req: Request, res: Response) => {
   const d = parsed.data;
 
   const result = await pool.query(
-    `INSERT INTO events (name, event_date, start_time, end_time, notes, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO events (name, event_date, start_time, end_time, attendance_mode, notes, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING *`,
-    [d.name, d.eventDate, d.startTime, d.endTime, d.notes || null, req.user?.id || null]
+    [d.name, d.eventDate, d.startTime, d.endTime, d.attendanceMode, d.notes || null, req.user?.id || null]
   );
   return res.status(201).json(result.rows[0]);
 };
@@ -56,10 +57,19 @@ export const updateEventHandler = async (req: Request, res: Response) => {
          event_date = $2,
          start_time = $3,
          end_time = $4,
-         notes = $5
-     WHERE id = $6
+         attendance_mode = $5,
+         notes = $6
+     WHERE id = $7
      RETURNING *`,
-    [d.name ?? c.name, d.eventDate ?? c.event_date, d.startTime ?? c.start_time, d.endTime ?? c.end_time, d.notes ?? c.notes, eventId]
+    [
+      d.name ?? c.name,
+      d.eventDate ?? c.event_date,
+      d.startTime ?? c.start_time,
+      d.endTime ?? c.end_time,
+      d.attendanceMode ?? c.attendance_mode,
+      d.notes ?? c.notes,
+      eventId
+    ]
   );
   return res.json(result.rows[0]);
 };

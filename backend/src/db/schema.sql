@@ -115,11 +115,19 @@ CREATE TABLE IF NOT EXISTS events (
   event_date DATE NOT NULL,
   start_time TIME NOT NULL,
   end_time TIME NOT NULL,
+  attendance_mode TEXT NOT NULL CHECK (attendance_mode IN ('full', 'checkin_only')) DEFAULT 'full',
   notes TEXT,
   created_by UUID REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (name, event_date, start_time)
 );
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS attendance_mode TEXT NOT NULL DEFAULT 'full';
+
+UPDATE events
+SET attendance_mode = 'full'
+WHERE attendance_mode IS NULL OR attendance_mode = '';
 
 CREATE TABLE IF NOT EXISTS attendance_records (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

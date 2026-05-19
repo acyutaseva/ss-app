@@ -8,6 +8,7 @@ type EventRow = {
   event_date: string;
   start_time: string;
   end_time: string;
+  attendance_mode: 'full' | 'checkin_only';
   notes?: string | null;
 };
 
@@ -27,6 +28,7 @@ type EventFormState = {
   eventDate: string;
   startTime: string;
   endTime: string;
+  attendanceMode: 'full' | 'checkin_only';
   notes: string;
 };
 
@@ -73,6 +75,7 @@ export const EventsPage = () => {
     eventDate: '',
     startTime: '09:00',
     endTime: '11:00',
+    attendanceMode: 'full',
     notes: ''
   });
   const [editForm, setEditForm] = useState<EditEventState | null>(null);
@@ -101,6 +104,7 @@ export const EventsPage = () => {
     eventDate: formatDateOnly(ev.event_date),
     startTime: formatTimeOnly(ev.start_time),
     endTime: formatTimeOnly(ev.end_time),
+    attendanceMode: ev.attendance_mode,
     notes: ev.notes || ''
   });
 
@@ -179,7 +183,7 @@ export const EventsPage = () => {
     setMsg('Event created');
     setShowAddEvent(false);
     setAddError('');
-    setForm({ name: '', eventDate: '', startTime: '09:00', endTime: '11:00', notes: '' });
+    setForm({ name: '', eventDate: '', startTime: '09:00', endTime: '11:00', attendanceMode: 'full', notes: '' });
     await loadEvents();
   };
 
@@ -233,6 +237,7 @@ export const EventsPage = () => {
               <th>Event</th>
               <th>Date</th>
               <th>Time</th>
+              <th>Mode</th>
               <th>Notes</th>
               <th>Actions</th>
             </tr>
@@ -243,6 +248,7 @@ export const EventsPage = () => {
                 <td>{ev.name}</td>
                 <td>{formatDateOnly(ev.event_date)}</td>
                 <td>{formatTimeOnly(ev.start_time)} - {formatTimeOnly(ev.end_time)}</td>
+                <td>{ev.attendance_mode === 'checkin_only' ? 'Check-in Only' : 'Full'}</td>
                 <td>{ev.notes || '-'}</td>
                 <td>
                   <div className="row wrap">
@@ -263,6 +269,7 @@ export const EventsPage = () => {
                 <h3>{ev.name}</h3>
                 <p>{formatDateOnly(ev.event_date)}</p>
                 <p>{formatTimeOnly(ev.start_time)} - {formatTimeOnly(ev.end_time)}</p>
+                <p>{ev.attendance_mode === 'checkin_only' ? 'Check-in Only' : 'Full'}</p>
                 <p>{ev.notes || '-'}</p>
               </div>
               <div className="row wrap">
@@ -376,6 +383,13 @@ export const EventsPage = () => {
                 <span className="field-label">Notes</span>
                 <textarea value={form.notes} onChange={(e) => setForm((v) => ({ ...v, notes: e.target.value }))} />
               </label>
+              <label className="field">
+                <span className="field-label">Attendance Mode</span>
+                <select value={form.attendanceMode} onChange={(e) => setForm((v) => ({ ...v, attendanceMode: e.target.value as 'full' | 'checkin_only' }))}>
+                  <option value="full">Full (Check-in + Check-out)</option>
+                  <option value="checkin_only">Check-in Only (Online)</option>
+                </select>
+              </label>
               <div className="row">
                 <button className="btn primary" onClick={() => createEvent().catch(() => setAddError('Failed to create event'))}>Create Event</button>
                 <button className="btn ghost" onClick={() => { setAddError(''); setShowAddEvent(false); }}>Cancel</button>
@@ -412,6 +426,13 @@ export const EventsPage = () => {
               <label className="field">
                 <span className="field-label">Notes</span>
                 <textarea value={editForm.notes} onChange={(e) => setEditForm((v) => v ? { ...v, notes: e.target.value } : v)} />
+              </label>
+              <label className="field">
+                <span className="field-label">Attendance Mode</span>
+                <select value={editForm.attendanceMode} onChange={(e) => setEditForm((v) => v ? { ...v, attendanceMode: e.target.value as 'full' | 'checkin_only' } : v)}>
+                  <option value="full">Full (Check-in + Check-out)</option>
+                  <option value="checkin_only">Check-in Only (Online)</option>
+                </select>
               </label>
               <div className="row">
                 <button className="btn primary" onClick={() => saveEditEvent().catch(() => setError('Failed to update event'))}>Save Event</button>

@@ -45,7 +45,7 @@ const canAccessEnrollment = async (userId: string, role: string, groupId: string
 
 const getEvent = async (eventId: string) => {
   const result = await pool.query(
-    `SELECT id, event_date, start_time, end_time FROM events WHERE id = $1 LIMIT 1`,
+    `SELECT id, event_date, start_time, end_time, attendance_mode FROM events WHERE id = $1 LIMIT 1`,
     [eventId]
   );
   return result.rows[0] || null;
@@ -73,6 +73,9 @@ export const checkInHandler = async (req: Request, res: Response) => {
 
   const event = await getEvent(parsed.data.eventId);
   if (!event) return res.status(400).json({ message: 'Event not found' });
+  if (event.attendance_mode === 'checkin_only') {
+    return res.status(400).json({ message: 'Checkout is disabled for this event' });
+  }
   if (req.user.role === 'teacher' && isPastEventForTeacher(event)) {
     return res.status(400).json({ message: 'Teachers cannot add attendance for past events' });
   }

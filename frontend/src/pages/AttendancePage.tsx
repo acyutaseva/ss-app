@@ -18,6 +18,7 @@ type EventRow = {
   event_date: string;
   start_time: string;
   end_time: string;
+  attendance_mode: 'full' | 'checkin_only';
 };
 
 const toDialPhone = (value?: string | null) => {
@@ -50,6 +51,39 @@ const toDisplayDate = (value: string) => {
   return `${dd} ${monthLabel} ${yyyy}`;
 };
 
+const toEventDateTime = (ev: EventRow) => {
+  const iso = `${ev.event_date}T${ev.start_time}`;
+  const dt = new Date(iso);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+};
+
+const getDefaultEventId = (rows: EventRow[]) => {
+  if (!rows.length) return '';
+  const today = new Date().toISOString().slice(0, 10);
+
+  const todaysEvents = rows
+    .filter((ev) => ev.event_date === today)
+    .sort((a, b) => {
+      const aTime = toEventDateTime(a)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      const bTime = toEventDateTime(b)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      return aTime - bTime;
+    });
+
+  if (todaysEvents.length) {
+    return todaysEvents[0].id;
+  }
+
+  const upcomingEvents = rows
+    .filter((ev) => ev.event_date > today)
+    .sort((a, b) => {
+      const aTime = toEventDateTime(a)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      const bTime = toEventDateTime(b)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      return aTime - bTime;
+    });
+
+  return upcomingEvents[0]?.id || rows[0].id;
+};
+
 export const AttendancePage = () => {
   const { token } = useAuth();
   const [query, setQuery] = useState('');
@@ -61,6 +95,8 @@ export const AttendancePage = () => {
   const [attendanceTab, setAttendanceTab] = useState<'checkin' | 'checkout'>('checkin');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [msg, setMsg] = useState('');
+  const selectedEvent = events.find((e) => e.id === selectedEventId);
+  const isCheckinOnlyEvent = selectedEvent?.attendance_mode === 'checkin_only';
 
   const toDateOnly = (value?: string | null) => {
     if (!value) return '-';
@@ -71,7 +107,7 @@ export const AttendancePage = () => {
     if (!token) return;
     const data = await apiFetch<EventRow[]>('/events?mode=attendance', {}, token);
     setEvents(data);
-    if (!selectedEventId && data.length) setSelectedEventId(data[0].id);
+    if (!selectedEventId && data.length) setSelectedEventId(getDefaultEventId(data));
   };
 
   const loadStudents = async () => {
@@ -104,12 +140,21 @@ export const AttendancePage = () => {
     loadStudents().catch(() => setMsg('Failed to load students'));
   }, [token, selectedEventId, selectedGroupId, query]);
 
+  useEffect(() => {
+    if (isCheckinOnlyEvent && attendanceTab === 'checkout') {
+      setAttendanceTab('checkin');
+    }
+  }, [isCheckinOnlyEvent, attendanceTab]);
+
   const filteredStudents = useMemo(() => {
+    if (isCheckinOnlyEvent) {
+      return students.filter((student) => !student.checkin_time);
+    }
     if (attendanceTab === 'checkin') {
       return students.filter((student) => !student.checkin_time);
     }
     return students.filter((student) => Boolean(student.checkin_time) && !student.checkout_time);
-  }, [attendanceTab, students]);
+  }, [attendanceTab, students, isCheckinOnlyEvent]);
 
   const checkIn = async (studentId: string) => {
     if (!token || !selectedEventId) return;
@@ -142,8 +187,8 @@ export const AttendancePage = () => {
     <section className="content">
       <div className="card">
         <h2>Event Attendance</h2>
-        <div className="row wrap">
-          <select value={selectedEventId} onChange={(e) => setSelectedEventId(e.target.value)}>
+        <div className="row wrap attendance-filters-row">
+          <select className="attendance-filter-control" value={selectedEventId} onChange={(e) => setSelectedEventId(e.target.value)}>
             <option value="">Select event</option>
             {events.map((ev) => (
               <option key={ev.id} value={ev.id}>
@@ -151,7 +196,7 @@ export const AttendancePage = () => {
               </option>
             ))}
           </select>
-          <select value={selectedGroupId} onChange={(e) => setSelectedGroupId(e.target.value)}>
+          <select className="attendance-filter-control" value={selectedGroupId} onChange={(e) => setSelectedGroupId(e.target.value)}>
             <option value="">All groups</option>
             {groups.map((group) => (
               <option key={group.id} value={group.id}>
@@ -160,6 +205,7 @@ export const AttendancePage = () => {
             ))}
           </select>
           <input
+            className="attendance-filter-control"
             placeholder="Search student"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -172,9 +218,14 @@ export const AttendancePage = () => {
         <button className={attendanceTab === 'checkin' ? 'tab-btn active' : 'tab-btn'} onClick={() => setAttendanceTab('checkin')}>
           Checkin Pending ({students.filter((s) => !s.checkin_time).length})
         </button>
-        <button className={attendanceTab === 'checkout' ? 'tab-btn active' : 'tab-btn'} onClick={() => setAttendanceTab('checkout')}>
-          Checkout Pending ({students.filter((s) => Boolean(s.checkin_time) && !s.checkout_time).length})
-        </button>
+        {!isCheckinOnlyEvent && (
+          <button className={attendanceTab === 'checkout' ? 'tab-btn active' : 'tab-btn'} onClick={() => setAttendanceTab('checkout')}>
+            Checkout Pending ({students.filter((s) => Boolean(s.checkin_time) && !s.checkout_time).length})
+          </button>
+        )}
+        {isCheckinOnlyEvent && (
+          <span className="eyebrow" style={{ marginLeft: 'auto', alignSelf: 'center' }}>Check-in only event</span>
+        )}
       </div>    
       <div className="grid-list">
         {filteredStudents.map((student) => (

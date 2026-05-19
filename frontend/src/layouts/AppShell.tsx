@@ -13,7 +13,10 @@ export const AppShell = () => {
           <p className="eyebrow">Hare Krishan Sunday School</p>
           <h2>Student Management</h2>
         </div>
-        <p className="eyebrow">Role: {user?.role === 'admin' ? 'Admin' : 'Teacher'}</p>
+        <div className="app-header-actions">
+          <p className="eyebrow">Role: {user?.role === 'admin' ? 'Admin' : 'Teacher'}</p>
+          <button className="btn ghost" onClick={logout}>Logout</button>
+        </div>
       </header>
 
       <div className="app-shell">
@@ -28,7 +31,6 @@ export const AppShell = () => {
             {user?.role === 'admin' && <NavLink to="/reports" className={navClass}>Reports</NavLink>}
           </nav>
 
-          <button className="btn ghost sidebar-logout" onClick={logout}>Logout</button>
         </aside>
 
         <main className="main-panel">
