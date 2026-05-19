@@ -46,11 +46,12 @@ JOIN school_years sy ON
   OR (g.name = 'Gauranga Group' AND sy.name IN ('Year 4', 'Year 5', 'Year 6'))
 ON CONFLICT (group_id, school_year_id) DO NOTHING;
 
-INSERT INTO events (name, event_date, start_time, end_time, attendance_mode, notes)
+INSERT INTO events (name, event_date, start_time, end_time, attendance_mode, applies_all_groups, notes)
 VALUES
-  ('Sunday School', '2026-05-24', '09:00', '11:30', 'full', 'Weekly Sunday School'),
-  ('HG Gauranga Darshan Class', '2026-05-16', '17:00', '18:30', 'full', 'Special class event')
+  ('Sunday School', '2026-05-24', '09:00', '11:30', 'full', true, 'Weekly Sunday School'),
+  ('HG Gauranga Darshan Class', '2026-05-16', '17:00', '18:30', 'full', true, 'Special class event')
 ON CONFLICT (name, event_date, start_time) DO UPDATE
 SET end_time = EXCLUDED.end_time,
     attendance_mode = EXCLUDED.attendance_mode,
+    applies_all_groups = EXCLUDED.applies_all_groups,
     notes = EXCLUDED.notes;

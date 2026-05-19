@@ -8,6 +8,8 @@ const eventSchema = z.object({
   startTime: z.string(),
   endTime: z.string(),
   attendanceMode: z.enum(['full', 'checkin_only']).default('full'),
+  appliesAllGroups: z.boolean().default(true),
+  groupIds: z.array(z.string().uuid()).default([]),
   notes: z.string().max(1000).optional()
 });
 
@@ -15,14 +17,33 @@ const updateEventSchema = eventSchema.partial();
 
 export const listEventsHandler = async (req: Request, res: Response) => {
   const mode = String(req.query.mode || '').trim();
-  let sql = `SELECT id, name, event_date, start_time, end_time, attendance_mode, notes FROM events`;
+  let sql = `
+    SELECT
+      e.id,
+      e.name,
+      e.event_date,
+      e.start_time,
+      e.end_time,
+      e.attendance_mode,
+      e.applies_all_groups,
+      e.notes,
+      COALESCE(
+        (
+          SELECT JSON_AGG(eg.group_id ORDER BY eg.group_id)
+          FROM event_groups eg
+          WHERE eg.event_id = e.id
+        ),
+        '[]'::json
+      ) AS group_ids
+    FROM events e
+  `;
   const values: string[] = [];
 
   if (mode === 'attendance' && req.user?.role === 'teacher') {
-    sql += ` WHERE event_date > CURRENT_DATE OR (event_date = CURRENT_DATE AND end_time >= CURRENT_TIME)`;
+    sql += ` WHERE e.event_date > CURRENT_DATE OR (e.event_date = CURRENT_DATE AND e.end_time >= CURRENT_TIME)`;
   }
 
-  sql += ` ORDER BY event_date DESC, start_time DESC`;
+  sql += ` ORDER BY e.event_date DESC, e.start_time DESC`;
   const result = await pool.query(sql, values);
   return res.json(result.rows);
 };
@@ -31,14 +52,50 @@ export const createEventHandler = async (req: Request, res: Response) => {
   const parsed = eventSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ message: 'Invalid input' });
   const d = parsed.data;
+  const groupIds = Array.from(new Set(d.groupIds));
+  if (!d.appliesAllGroups && !groupIds.length) {
+    return res.status(400).json({ message: 'At least one group must be selected for this event' });
+  }
 
-  const result = await pool.query(
-    `INSERT INTO events (name, event_date, start_time, end_time, attendance_mode, notes, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
-     RETURNING *`,
-    [d.name, d.eventDate, d.startTime, d.endTime, d.attendanceMode, d.notes || null, req.user?.id || null]
-  );
-  return res.status(201).json(result.rows[0]);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const result = await client.query(
+      `INSERT INTO events (name, event_date, start_time, end_time, attendance_mode, applies_all_groups, notes, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [d.name, d.eventDate, d.startTime, d.endTime, d.attendanceMode, d.appliesAllGroups, d.notes || null, req.user?.id || null]
+    );
+
+    if (!d.appliesAllGroups && groupIds.length) {
+      for (const groupId of groupIds) {
+        await client.query(
+          `INSERT INTO event_groups (event_id, group_id)
+           VALUES ($1, $2)
+           ON CONFLICT (event_id, group_id) DO NOTHING`,
+          [result.rows[0].id, groupId]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+
+    const hydrated = await pool.query(
+      `SELECT
+        e.*,
+        COALESCE((SELECT JSON_AGG(eg.group_id ORDER BY eg.group_id) FROM event_groups eg WHERE eg.event_id = e.id), '[]'::json) AS group_ids
+       FROM events e
+       WHERE e.id = $1`,
+      [result.rows[0].id]
+    );
+    return res.status(201).json(hydrated.rows[0]);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 export const updateEventHandler = async (req: Request, res: Response) => {
@@ -51,27 +108,69 @@ export const updateEventHandler = async (req: Request, res: Response) => {
   if (!current.rowCount) return res.status(404).json({ message: 'Event not found' });
   const c = current.rows[0];
 
-  const result = await pool.query(
-    `UPDATE events
-     SET name = $1,
-         event_date = $2,
-         start_time = $3,
-         end_time = $4,
-         attendance_mode = $5,
-         notes = $6
-     WHERE id = $7
-     RETURNING *`,
-    [
-      d.name ?? c.name,
-      d.eventDate ?? c.event_date,
-      d.startTime ?? c.start_time,
-      d.endTime ?? c.end_time,
-      d.attendanceMode ?? c.attendance_mode,
-      d.notes ?? c.notes,
-      eventId
-    ]
-  );
-  return res.json(result.rows[0]);
+  const nextAppliesAllGroups = d.appliesAllGroups ?? c.applies_all_groups;
+  const nextGroupIds = d.groupIds ? Array.from(new Set(d.groupIds)) : null;
+  if (nextAppliesAllGroups === false && nextGroupIds && nextGroupIds.length === 0) {
+    return res.status(400).json({ message: 'At least one group must be selected for this event' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    await client.query(
+      `UPDATE events
+       SET name = $1,
+           event_date = $2,
+           start_time = $3,
+           end_time = $4,
+           attendance_mode = $5,
+           applies_all_groups = $6,
+           notes = $7
+       WHERE id = $8`,
+      [
+        d.name ?? c.name,
+        d.eventDate ?? c.event_date,
+        d.startTime ?? c.start_time,
+        d.endTime ?? c.end_time,
+        d.attendanceMode ?? c.attendance_mode,
+        nextAppliesAllGroups,
+        d.notes ?? c.notes,
+        eventId
+      ]
+    );
+
+    if (nextAppliesAllGroups) {
+      await client.query('DELETE FROM event_groups WHERE event_id = $1', [eventId]);
+    } else if (nextGroupIds) {
+      await client.query('DELETE FROM event_groups WHERE event_id = $1', [eventId]);
+      for (const groupId of nextGroupIds) {
+        await client.query(
+          `INSERT INTO event_groups (event_id, group_id)
+           VALUES ($1, $2)
+           ON CONFLICT (event_id, group_id) DO NOTHING`,
+          [eventId, groupId]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+
+    const result = await pool.query(
+      `SELECT
+        e.*,
+        COALESCE((SELECT JSON_AGG(eg.group_id ORDER BY eg.group_id) FROM event_groups eg WHERE eg.event_id = e.id), '[]'::json) AS group_ids
+       FROM events e
+       WHERE e.id = $1`,
+      [eventId]
+    );
+    return res.json(result.rows[0]);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 export const deleteEventHandler = async (req: Request, res: Response) => {

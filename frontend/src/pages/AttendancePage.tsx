@@ -19,6 +19,8 @@ type EventRow = {
   start_time: string;
   end_time: string;
   attendance_mode: 'full' | 'checkin_only';
+  applies_all_groups: boolean;
+  group_ids: string[];
 };
 
 const toDialPhone = (value?: string | null) => {
@@ -98,6 +100,14 @@ export const AttendancePage = () => {
   const selectedEvent = events.find((e) => e.id === selectedEventId);
   const isCheckinOnlyEvent = selectedEvent?.attendance_mode === 'checkin_only';
 
+  const filteredGroups = useMemo(() => {
+    if (!selectedEvent || selectedEvent.applies_all_groups) {
+      return groups;
+    }
+    const allowed = new Set(selectedEvent.group_ids || []);
+    return groups.filter((g) => allowed.has(g.id));
+  }, [groups, selectedEvent]);
+
   const toDateOnly = (value?: string | null) => {
     if (!value) return '-';
     return value.includes('T') ? value.slice(0, 10) : value;
@@ -139,6 +149,30 @@ export const AttendancePage = () => {
     if (!token) return;
     loadStudents().catch(() => setMsg('Failed to load students'));
   }, [token, selectedEventId, selectedGroupId, query]);
+
+  useEffect(() => {
+    if (!selectedEvent) return;
+
+    if (selectedEvent.applies_all_groups) {
+      const groupExists = selectedGroupId ? groups.some((g) => g.id === selectedGroupId) : true;
+      if (!groupExists) {
+        setSelectedGroupId('');
+      }
+      return;
+    }
+
+    if (filteredGroups.length === 1) {
+      const onlyGroupId = filteredGroups[0].id;
+      if (selectedGroupId !== onlyGroupId) {
+        setSelectedGroupId(onlyGroupId);
+      }
+      return;
+    }
+
+    if (selectedGroupId && !filteredGroups.some((g) => g.id === selectedGroupId)) {
+      setSelectedGroupId('');
+    }
+  }, [selectedEvent, groups, filteredGroups, selectedGroupId]);
 
   useEffect(() => {
     if (isCheckinOnlyEvent && attendanceTab === 'checkout') {
@@ -197,8 +231,8 @@ export const AttendancePage = () => {
             ))}
           </select>
           <select className="attendance-filter-control" value={selectedGroupId} onChange={(e) => setSelectedGroupId(e.target.value)}>
-            <option value="">All groups</option>
-            {groups.map((group) => (
+            {(selectedEvent?.applies_all_groups || filteredGroups.length > 1) && <option value="">All groups</option>}
+            {filteredGroups.map((group) => (
               <option key={group.id} value={group.id}>
                 {group.name}
               </option>

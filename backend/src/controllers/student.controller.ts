@@ -14,6 +14,7 @@ export const listStudentsHandler = async (req: Request, res: Response) => {
 
   const where: string[] = [];
   const values: string[] = [];
+  let eventIdParamIndex: number | null = null;
 
   if (search) {
     values.push(`%${search}%`);
@@ -23,6 +24,26 @@ export const listStudentsHandler = async (req: Request, res: Response) => {
   if (groupId) {
     values.push(groupId);
     where.push(`se.group_id = $${values.length}`);
+  }
+
+  if (eventId) {
+    values.push(eventId);
+    eventIdParamIndex = values.length;
+    const eventIdRef = `$${eventIdParamIndex}`;
+    where.push(`EXISTS (
+      SELECT 1
+      FROM events ev
+      WHERE ev.id = ${eventIdRef}
+        AND (
+          ev.applies_all_groups = true
+          OR EXISTS (
+            SELECT 1
+            FROM event_groups eg
+            WHERE eg.event_id = ev.id
+              AND eg.group_id = se.group_id
+          )
+        )
+    )`);
   }
 
   if (req.user?.role === 'teacher') {
@@ -38,7 +59,7 @@ export const listStudentsHandler = async (req: Request, res: Response) => {
   }
 
   const eventJoin = eventId
-    ? `LEFT JOIN attendance_records ar ON ar.enrollment_id = se.id AND ar.event_id = $${values.length + 1}`
+    ? `LEFT JOIN attendance_records ar ON ar.enrollment_id = se.id AND ar.event_id = $${eventIdParamIndex}`
     : `LEFT JOIN attendance_records ar ON 1 = 0`;
 
   const baseFromWhere = `
@@ -52,7 +73,7 @@ export const listStudentsHandler = async (req: Request, res: Response) => {
     ${where.length ? `AND ${where.join(' AND ')}` : ''}
   `;
 
-  const baseValues = eventId ? [...values, eventId] : values;
+  const baseValues = values;
 
   const countSql = `SELECT COUNT(*)::int AS total ${baseFromWhere}`;
   const countResult = await pool.query(countSql, baseValues);

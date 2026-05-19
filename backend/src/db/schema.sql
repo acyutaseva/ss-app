@@ -2,6 +2,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 DROP TABLE IF EXISTS
   attendance_records,
+  event_groups,
   events,
   student_enrollments,
   academic_years,
@@ -116,6 +117,7 @@ CREATE TABLE IF NOT EXISTS events (
   start_time TIME NOT NULL,
   end_time TIME NOT NULL,
   attendance_mode TEXT NOT NULL CHECK (attendance_mode IN ('full', 'checkin_only')) DEFAULT 'full',
+  applies_all_groups BOOLEAN NOT NULL DEFAULT true,
   notes TEXT,
   created_by UUID REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -125,9 +127,18 @@ CREATE TABLE IF NOT EXISTS events (
 ALTER TABLE events
   ADD COLUMN IF NOT EXISTS attendance_mode TEXT NOT NULL DEFAULT 'full';
 
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS applies_all_groups BOOLEAN NOT NULL DEFAULT true;
+
 UPDATE events
 SET attendance_mode = 'full'
 WHERE attendance_mode IS NULL OR attendance_mode = '';
+
+CREATE TABLE IF NOT EXISTS event_groups (
+  event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  PRIMARY KEY (event_id, group_id)
+);
 
 CREATE TABLE IF NOT EXISTS attendance_records (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

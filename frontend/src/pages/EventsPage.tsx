@@ -9,7 +9,14 @@ type EventRow = {
   start_time: string;
   end_time: string;
   attendance_mode: 'full' | 'checkin_only';
+  applies_all_groups: boolean;
+  group_ids: string[];
   notes?: string | null;
+};
+
+type Group = {
+  id: string;
+  name: string;
 };
 
 type AttendanceRow = {
@@ -29,6 +36,8 @@ type EventFormState = {
   startTime: string;
   endTime: string;
   attendanceMode: 'full' | 'checkin_only';
+  appliesAllGroups: boolean;
+  groupIds: string[];
   notes: string;
 };
 
@@ -59,9 +68,17 @@ const getNextUpcomingEventId = (rows: EventRow[]) => {
   return next?.id || '';
 };
 
+const getEventGroupLabel = (event: EventRow, groups: Group[]) => {
+  if (event.applies_all_groups) return 'All groups';
+  const nameById = new Map(groups.map((g) => [g.id, g.name]));
+  const names = (event.group_ids || []).map((id) => nameById.get(id)).filter(Boolean) as string[];
+  return names.length ? names.join(', ') : 'Selected groups';
+};
+
 export const EventsPage = () => {
   const { token } = useAuth();
   const [events, setEvents] = useState<EventRow[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [eventsPage, setEventsPage] = useState(1);
   const [selectedEventId, setSelectedEventId] = useState('');
   const [attendance, setAttendance] = useState<AttendanceRow[]>([]);
@@ -76,6 +93,8 @@ export const EventsPage = () => {
     startTime: '09:00',
     endTime: '11:00',
     attendanceMode: 'full',
+    appliesAllGroups: true,
+    groupIds: [],
     notes: ''
   });
   const [editForm, setEditForm] = useState<EditEventState | null>(null);
@@ -105,8 +124,16 @@ export const EventsPage = () => {
     startTime: formatTimeOnly(ev.start_time),
     endTime: formatTimeOnly(ev.end_time),
     attendanceMode: ev.attendance_mode,
+    appliesAllGroups: ev.applies_all_groups,
+    groupIds: ev.group_ids || [],
     notes: ev.notes || ''
   });
+
+  const loadGroups = async () => {
+    if (!token) return;
+    const data = await apiFetch<Group[]>('/groups', {}, token);
+    setGroups(data);
+  };
 
   const loadEvents = async () => {
     if (!token) return;
@@ -131,6 +158,7 @@ export const EventsPage = () => {
 
   useEffect(() => {
     loadEvents().catch(() => setError('Failed to load events'));
+    loadGroups().catch(() => setError('Failed to load groups'));
   }, [token]);
 
   useEffect(() => {
@@ -160,6 +188,7 @@ export const EventsPage = () => {
     if (!v.startTime) return 'Please select a start time.';
     if (!v.endTime) return 'Please select an end time.';
     if (v.startTime >= v.endTime) return 'End time must be after start time.';
+    if (!v.appliesAllGroups && v.groupIds.length === 0) return 'Please select at least one group.';
     return '';
   };
 
@@ -176,6 +205,7 @@ export const EventsPage = () => {
       body: JSON.stringify({
         ...form,
         name: form.name.trim(),
+        groupIds: form.appliesAllGroups ? [] : form.groupIds,
         notes: form.notes.trim() || undefined
       })
     }, token);
@@ -183,7 +213,7 @@ export const EventsPage = () => {
     setMsg('Event created');
     setShowAddEvent(false);
     setAddError('');
-    setForm({ name: '', eventDate: '', startTime: '09:00', endTime: '11:00', attendanceMode: 'full', notes: '' });
+    setForm({ name: '', eventDate: '', startTime: '09:00', endTime: '11:00', attendanceMode: 'full', appliesAllGroups: true, groupIds: [], notes: '' });
     await loadEvents();
   };
 
@@ -211,12 +241,20 @@ export const EventsPage = () => {
       body: JSON.stringify({
         ...editForm,
         name: editForm.name.trim(),
+        groupIds: editForm.appliesAllGroups ? [] : editForm.groupIds,
         notes: editForm.notes.trim() || undefined
       })
     }, token);
     setMsg('Event updated');
     setEditForm(null);
     await loadEvents();
+  };
+
+  const toggleGroupSelection = (ids: string[], groupId: string) => {
+    if (ids.includes(groupId)) {
+      return ids.filter((id) => id !== groupId);
+    }
+    return [...ids, groupId];
   };
 
   return (
@@ -238,7 +276,7 @@ export const EventsPage = () => {
               <th>Date</th>
               <th>Time</th>
               <th>Mode</th>
-              <th>Notes</th>
+              <th>Groups</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -249,7 +287,7 @@ export const EventsPage = () => {
                 <td>{formatDateOnly(ev.event_date)}</td>
                 <td>{formatTimeOnly(ev.start_time)} - {formatTimeOnly(ev.end_time)}</td>
                 <td>{ev.attendance_mode === 'checkin_only' ? 'Check-in Only' : 'Full'}</td>
-                <td>{ev.notes || '-'}</td>
+                <td>{getEventGroupLabel(ev, groups)}</td>
                 <td>
                   <div className="row wrap">
                     <button className="btn ghost contact-btn" onClick={() => setSelectedEventId(ev.id)}>Attendance</button>
@@ -270,7 +308,7 @@ export const EventsPage = () => {
                 <p>{formatDateOnly(ev.event_date)}</p>
                 <p>{formatTimeOnly(ev.start_time)} - {formatTimeOnly(ev.end_time)}</p>
                 <p>{ev.attendance_mode === 'checkin_only' ? 'Check-in Only' : 'Full'}</p>
-                <p>{ev.notes || '-'}</p>
+                <p>{getEventGroupLabel(ev, groups)}</p>
               </div>
               <div className="row wrap">
                 <button className="btn ghost contact-btn" onClick={() => setSelectedEventId(ev.id)}>Attendance</button>
@@ -390,6 +428,36 @@ export const EventsPage = () => {
                   <option value="checkin_only">Check-in Only (Online)</option>
                 </select>
               </label>
+              <label className="field">
+                <span className="field-label">Group Target</span>
+                <select
+                  value={form.appliesAllGroups ? 'all' : 'selected'}
+                  onChange={(e) => setForm((v) => ({ ...v, appliesAllGroups: e.target.value === 'all' }))}
+                >
+                  <option value="all">All Groups</option>
+                  <option value="selected">Selected Groups</option>
+                </select>
+              </label>
+              {!form.appliesAllGroups && (
+                <div className="field">
+                  <span className="field-label">Select Groups</span>
+                  <div className="event-group-picker">
+                    {groups.map((g) => (
+                      <label
+                        key={g.id}
+                        className={form.groupIds.includes(g.id) ? 'event-group-chip checked' : 'event-group-chip'}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={form.groupIds.includes(g.id)}
+                          onChange={() => setForm((v) => ({ ...v, groupIds: toggleGroupSelection(v.groupIds, g.id) }))}
+                        />
+                        <span>{g.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="row">
                 <button className="btn primary" onClick={() => createEvent().catch(() => setAddError('Failed to create event'))}>Create Event</button>
                 <button className="btn ghost" onClick={() => { setAddError(''); setShowAddEvent(false); }}>Cancel</button>
@@ -434,6 +502,36 @@ export const EventsPage = () => {
                   <option value="checkin_only">Check-in Only (Online)</option>
                 </select>
               </label>
+              <label className="field">
+                <span className="field-label">Group Target</span>
+                <select
+                  value={editForm.appliesAllGroups ? 'all' : 'selected'}
+                  onChange={(e) => setEditForm((v) => v ? { ...v, appliesAllGroups: e.target.value === 'all' } : v)}
+                >
+                  <option value="all">All Groups</option>
+                  <option value="selected">Selected Groups</option>
+                </select>
+              </label>
+              {!editForm.appliesAllGroups && (
+                <div className="field">
+                  <span className="field-label">Select Groups</span>
+                  <div className="event-group-picker">
+                    {groups.map((g) => (
+                      <label
+                        key={g.id}
+                        className={editForm.groupIds.includes(g.id) ? 'event-group-chip checked' : 'event-group-chip'}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={editForm.groupIds.includes(g.id)}
+                          onChange={() => setEditForm((v) => v ? { ...v, groupIds: toggleGroupSelection(v.groupIds, g.id) } : v)}
+                        />
+                        <span>{g.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="row">
                 <button className="btn primary" onClick={() => saveEditEvent().catch(() => setError('Failed to update event'))}>Save Event</button>
                 <button className="btn ghost" onClick={() => setEditForm(null)}>Cancel</button>

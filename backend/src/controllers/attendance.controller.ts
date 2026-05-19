@@ -73,9 +73,6 @@ export const checkInHandler = async (req: Request, res: Response) => {
 
   const event = await getEvent(parsed.data.eventId);
   if (!event) return res.status(400).json({ message: 'Event not found' });
-  if (event.attendance_mode === 'checkin_only') {
-    return res.status(400).json({ message: 'Checkout is disabled for this event' });
-  }
   if (req.user.role === 'teacher' && isPastEventForTeacher(event)) {
     return res.status(400).json({ message: 'Teachers cannot add attendance for past events' });
   }
@@ -108,6 +105,9 @@ export const checkOutHandler = async (req: Request, res: Response) => {
 
   const event = await getEvent(parsed.data.eventId);
   if (!event) return res.status(400).json({ message: 'Event not found' });
+  if (event.attendance_mode === 'checkin_only') {
+    return res.status(400).json({ message: 'Checkout is disabled for this event' });
+  }
   if (req.user.role === 'teacher' && isPastEventForTeacher(event)) {
     return res.status(400).json({ message: 'Teachers cannot add attendance for past events' });
   }
