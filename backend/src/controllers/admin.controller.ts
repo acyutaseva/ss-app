@@ -1,7 +1,10 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
+import crypto from 'crypto';
 import { pool } from '../db/pool.js';
+import { sendTemplatedEmail } from '../services/email.service.js';
+import { createPasswordResetUrl } from '../services/auth.service.js';
 
 const createStudentSchema = z.object({
   fullName: z.string().min(2).max(140),
@@ -58,7 +61,7 @@ const createUserSchema = z.object({
   email: z.string().email(),
   phoneNumber: z.string().max(40).optional(),
   role: z.enum(['admin', 'teacher']),
-  password: z.string().min(6)
+  password: z.string().min(6).optional()
 });
 
 const updateUserSchema = z.object({
@@ -339,13 +342,16 @@ export const listUsersHandler = async (req: Request, res: Response) => {
   const page = Math.max(1, Number(req.query.page || 1));
   const pageSize = Math.min(15, Math.max(1, Number(req.query.pageSize || 15)));
   const offset = (page - 1) * pageSize;
+  const activeOnly = String(req.query.activeOnly || '').toLowerCase() === 'true';
+  const whereClause = activeOnly ? 'WHERE is_active = true' : '';
 
-  const countResult = await pool.query('SELECT COUNT(*)::int AS total FROM users');
+  const countResult = await pool.query(`SELECT COUNT(*)::int AS total FROM users ${whereClause}`);
   const total = countResult.rows[0]?.total || 0;
 
   const result = await pool.query(
     `SELECT id, name, email, phone_number, role, is_active, created_at
      FROM users
+     ${whereClause}
      ORDER BY created_at DESC
      LIMIT $1
      OFFSET $2`,
@@ -365,7 +371,8 @@ export const createUserHandler = async (req: Request, res: Response) => {
   const parsed = createUserSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ message: 'Invalid input' });
   const d = parsed.data;
-  const passwordHash = await bcrypt.hash(d.password, 10);
+  const rawPassword = d.password || crypto.randomBytes(24).toString('base64url');
+  const passwordHash = await bcrypt.hash(rawPassword, 10);
 
   const result = await pool.query(
     `INSERT INTO users (name, email, phone_number, password_hash, role, is_active)
@@ -376,10 +383,58 @@ export const createUserHandler = async (req: Request, res: Response) => {
        password_hash = EXCLUDED.password_hash,
        role = EXCLUDED.role,
        is_active = true
-     RETURNING id, name, email, phone_number, role, is_active`,
+     RETURNING id, name, email, phone_number, role, is_active, password_hash`,
     [d.name, d.email, d.phoneNumber || null, passwordHash, d.role]
   );
-  return res.status(201).json(result.rows[0]);
+
+  const createdUser = result.rows[0];
+  const resetUrl = createPasswordResetUrl(createdUser.id, createdUser.password_hash);
+  const loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/login`;
+  const notificationEmail = process.env.LOGIN_NOTIFICATION_EMAIL || 'abhishekchouhan@gmail.com';
+  const recipients = Array.from(new Set([createdUser.email, notificationEmail].filter(Boolean)));
+  let sentCount = 0;
+  let failedCount = 0;
+
+  try {
+    const deliveries = await Promise.allSettled(
+      recipients.map((to) => sendTemplatedEmail({
+        to,
+        subject: 'Sunday School - Volunteer Account Created',
+        template: 'volunteerWelcome',
+        context: {
+          userName: createdUser.name,
+          userEmail: createdUser.email,
+          role: createdUser.role,
+          loginUrl,
+          resetUrl
+        }
+      }))
+    );
+
+    deliveries.forEach((delivery, index) => {
+      if (delivery.status === 'rejected') {
+        failedCount += 1;
+        console.error(`Failed to send volunteer creation email to ${recipients[index]}:`, delivery.reason);
+      } else {
+        sentCount += 1;
+      }
+    });
+  } catch (err) {
+    failedCount = recipients.length;
+    console.error('Failed to send volunteer creation email:', err);
+  }
+
+  const { password_hash: _passwordHash, ...safeUser } = createdUser;
+
+  return res.status(201).json({
+    ...safeUser,
+    emailQueued: sentCount > 0,
+    emailDelivery: {
+      requested: recipients.length,
+      sent: sentCount,
+      failed: failedCount
+    }
+  });
 };
 
 export const updateUserHandler = async (req: Request, res: Response) => {
@@ -411,6 +466,34 @@ export const updateUserHandler = async (req: Request, res: Response) => {
   );
   if (!result.rowCount) return res.status(404).json({ message: 'User not found' });
   return res.json(result.rows[0]);
+};
+
+export const deleteUserHandler = async (req: Request, res: Response) => {
+  const userId = String(req.params.userId || '');
+  if (!userId) return res.status(400).json({ message: 'userId is required' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // These references are nullable and would otherwise block hard delete.
+    await client.query('UPDATE events SET created_by = NULL WHERE created_by = $1', [userId]);
+    await client.query('UPDATE attendance_records SET volunteer_id = NULL WHERE volunteer_id = $1', [userId]);
+
+    const result = await client.query('DELETE FROM users WHERE id = $1 RETURNING id', [userId]);
+    if (!result.rowCount) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    await client.query('COMMIT');
+    return res.status(204).send();
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 export const updateStudentHandler = async (req: Request, res: Response) => {

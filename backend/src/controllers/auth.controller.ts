@@ -1,12 +1,21 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { login } from '../services/auth.service.js';
+import { login, requestPasswordReset, resetPassword } from '../services/auth.service.js';
 
 import { sendTemplatedEmail } from '../services/email.service.js';
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6)
+});
+
+const forgotPasswordSchema = z.object({
+  email: z.string().email()
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  newPassword: z.string().min(6)
 });
 
 export const loginHandler = async (req: Request, res: Response) => {
@@ -21,6 +30,35 @@ export const loginHandler = async (req: Request, res: Response) => {
   }
 
   return res.json(result);
+};
+
+export const forgotPasswordHandler = async (req: Request, res: Response) => {
+  const parsed = forgotPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Invalid input' });
+  }
+
+  try {
+    await requestPasswordReset(parsed.data.email);
+  } catch (err) {
+    console.error('Forgot password request failed:', err);
+  }
+
+  return res.json({ message: 'If that email exists, a reset link has been sent.' });
+};
+
+export const resetPasswordHandler = async (req: Request, res: Response) => {
+  const parsed = resetPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Invalid input' });
+  }
+
+  try {
+    await resetPassword(parsed.data.token, parsed.data.newPassword);
+    return res.json({ message: 'Password has been reset successfully.' });
+  } catch (err) {
+    return res.status(400).json({ message: err instanceof Error ? err.message : 'Unable to reset password' });
+  }
 };
 
 // Example: Send a test email

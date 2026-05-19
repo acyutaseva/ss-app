@@ -19,6 +19,15 @@ type UsersApiResponse = {
   totalPages: number;
 };
 
+type CreateUserResponse = UserRow & {
+  emailQueued?: boolean;
+  emailDelivery?: {
+    requested: number;
+    sent: number;
+    failed: number;
+  };
+};
+
 type EditUserState = {
   id: string;
   name: string;
@@ -68,18 +77,22 @@ export const VolunteersPage = () => {
     name: '',
     email: '',
     phoneNumber: '',
-    role: 'teacher' as 'admin' | 'teacher',
-    password: ''
+    role: 'teacher' as 'admin' | 'teacher'
   });
   const [addError, setAddError] = useState('');
+  const [notice, setNotice] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [deleteError, setDeleteError] = useState('');
   const [editUser, setEditUser] = useState<EditUserState | null>(null);
+  const normalizedEmail = userForm.email.trim().toLowerCase();
+  const emailIsValid = normalizedEmail.length === 0 || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
 
   const loadUsers = async () => {
     if (!token) return;
     const params = new URLSearchParams();
     params.set('page', String(page));
     params.set('pageSize', String(pageSize));
+    params.set('activeOnly', 'true');
     const usersData = await apiFetch<UsersApiResponse>(`/admin/users?${params.toString()}`, {}, token);
     setUsers(usersData.items);
     setTotal(usersData.total);
@@ -92,10 +105,9 @@ export const VolunteersPage = () => {
 
   const validateNewUser = () => {
     const name = userForm.name.trim();
-    const email = userForm.email.trim();
+    const email = normalizedEmail;
     if (name.length < 2) return 'Name must be at least 2 characters.';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Please enter a valid email address.';
-    if (userForm.password.length < 6) return 'Password must be at least 6 characters.';
     return '';
   };
 
@@ -108,18 +120,23 @@ export const VolunteersPage = () => {
     }
 
     setAddError('');
-    await apiFetch('/admin/users', {
+    const created = await apiFetch<CreateUserResponse>('/admin/users', {
       method: 'POST',
       body: JSON.stringify({
         name: userForm.name.trim(),
         email: userForm.email.trim().toLowerCase(),
         phoneNumber: userForm.phoneNumber.trim() || undefined,
-        role: userForm.role,
-        password: userForm.password
+        role: userForm.role
       })
     }, token);
 
-    setUserForm({ name: '', email: '', phoneNumber: '', role: 'teacher', password: '' });
+    if (created.emailQueued === false) {
+      setNotice('Volunteer created, but welcome email could not be delivered.');
+    } else {
+      setNotice('Volunteer created and welcome email sent.');
+    }
+
+    setUserForm({ name: '', email: '', phoneNumber: '', role: 'teacher' });
     setShowAddVolunteer(false);
     setPage(1);
     await loadUsers();
@@ -141,16 +158,11 @@ export const VolunteersPage = () => {
     await loadUsers();
   };
 
-  const deactivateUser = async () => {
+  const deleteUser = async () => {
     if (!token || !confirmDeleteUser) return;
+    setDeleteError('');
     await apiFetch(`/admin/users/${confirmDeleteUser.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        name: confirmDeleteUser.name,
-        phoneNumber: confirmDeleteUser.phoneNumber,
-        role: confirmDeleteUser.role,
-        isActive: false
-      })
+      method: 'DELETE'
     }, token);
     setConfirmDeleteUser(null);
     setEditUser(null);
@@ -190,9 +202,10 @@ export const VolunteersPage = () => {
       <div className="card">
         <div className="row wrap" style={{ justifyContent: 'space-between' }}>
           <h2>Volunteers</h2>
-          <button className="btn primary" onClick={() => { setAddError(''); setShowAddVolunteer(true); }}>Add Volunteer</button>
+          <button className="btn primary" onClick={() => { setAddError(''); setNotice(''); setShowAddVolunteer(true); }}>Add Volunteer</button>
         </div>
         {error && <p className="error">{error}</p>}
+        {notice && <p className="ok">{notice}</p>}
       </div>
 
       <div className="card table-wrap">
@@ -338,8 +351,9 @@ export const VolunteersPage = () => {
               </label>
               <label className="field">
                 <span className="field-label">Email</span>
-                <input type="email" value={userForm.email} onChange={(e) => setUserForm((v) => ({ ...v, email: e.target.value }))} />
+                <input type="email" value={userForm.email} onChange={(e) => setUserForm((v) => ({ ...v, email: e.target.value }))} required />
               </label>
+              {!emailIsValid && <p className="error">Please enter a valid email address.</p>}
               <label className="field">
                 <span className="field-label">Phone Number</span>
                 <input value={userForm.phoneNumber} onChange={(e) => setUserForm((v) => ({ ...v, phoneNumber: e.target.value }))} />
@@ -351,12 +365,8 @@ export const VolunteersPage = () => {
                   <option value="admin">Admin</option>
                 </select>
               </label>
-              <label className="field">
-                <span className="field-label">Password</span>
-                <input type="password" value={userForm.password} onChange={(e) => setUserForm((v) => ({ ...v, password: e.target.value }))} />
-              </label>
               <div className="row">
-                <button className="btn primary" onClick={() => createUser().catch(() => setAddError('Failed to create volunteer'))}>Create Volunteer</button>
+                <button className="btn primary" disabled={!emailIsValid} onClick={() => createUser().catch(() => setAddError('Failed to create volunteer'))}>Create Volunteer</button>
                 <button className="btn ghost" onClick={() => setShowAddVolunteer(false)}>Cancel</button>
               </div>
               {addError && <p className="error">{addError}</p>}
@@ -398,7 +408,17 @@ export const VolunteersPage = () => {
               </label>
               <div className="row wrap">
                 <button className="btn primary" onClick={() => saveUser().catch(() => setError('Failed to update volunteer'))}>Save</button>
-                <button className="btn warn" onClick={() => setConfirmDeleteUser(editUser)}>Delete</button>
+                <button
+                  className="btn warn"
+                  onClick={() => {
+                    if (!editUser) return;
+                    setDeleteError('');
+                    setConfirmDeleteUser({ ...editUser });
+                    setEditUser(null);
+                  }}
+                >
+                  Delete
+                </button>
                 <button className="btn ghost" onClick={() => setEditUser(null)}>Cancel</button>
               </div>
             </div>
@@ -410,10 +430,12 @@ export const VolunteersPage = () => {
         <div className="modal-backdrop" onClick={() => setConfirmDeleteUser(null)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <h2>Confirm Delete</h2>
-            <p>Deactivate volunteer <strong>{confirmDeleteUser.name}</strong>?</p>
+            <p>Permanently delete volunteer <strong>{confirmDeleteUser.name}</strong>?</p>
+            <p className="error" style={{ marginTop: 8 }}>This action cannot be undone.</p>
+            {deleteError && <p className="error" style={{ marginTop: 8 }}>{deleteError}</p>}
             <div className="row" style={{ marginTop: 12 }}>
-              <button className="btn warn" onClick={() => deactivateUser().catch(() => setError('Failed to delete volunteer'))}>Confirm</button>
-              <button className="btn ghost" onClick={() => setConfirmDeleteUser(null)}>Cancel</button>
+              <button className="btn warn" onClick={() => deleteUser().catch(() => setDeleteError('Failed to delete volunteer'))}>Confirm</button>
+              <button className="btn ghost" onClick={() => { setDeleteError(''); setConfirmDeleteUser(null); }}>Cancel</button>
             </div>
           </div>
         </div>

@@ -1,6 +1,5 @@
 import { Router } from 'express';
-import { loginHandler } from '../controllers/auth.controller.js';
-import { sendTestEmailHandler } from '../controllers/auth.controller.js';
+import { forgotPasswordHandler, loginHandler, resetPasswordHandler, sendTestEmailHandler } from '../controllers/auth.controller.js';
 import { checkInHandler, checkOutHandler, termReportHandler } from '../controllers/attendance.controller.js';
 import { listStudentsHandler } from '../controllers/student.controller.js';
 import { listGroupsHandler } from '../controllers/group.controller.js';
@@ -27,6 +26,7 @@ import {
   rolloverAcademicYearHandler,
   listTeachersHandler,
   createUserHandler,
+  deleteUserHandler,
   updateEnrollmentPaymentHandler,
   updateUserHandler
 } from '../controllers/admin.controller.js';
@@ -36,6 +36,8 @@ import { requireAuth, requireRole } from '../middleware/auth.js';
 const router = Router();
 
 router.post('/auth/login', loginHandler);
+router.post('/auth/forgot-password', forgotPasswordHandler);
+router.post('/auth/reset-password', resetPasswordHandler);
 
 // Route to send a test email
 router.post('/auth/send-test-email', sendTestEmailHandler);
@@ -62,6 +64,7 @@ router.patch('/admin/enrollments/:enrollmentId/payment', requireAuth, requireRol
 router.get('/admin/users', requireAuth, requireRole('admin'), listUsersHandler);
 router.post('/admin/users', requireAuth, requireRole('admin'), createUserHandler);
 router.patch('/admin/users/:userId', requireAuth, requireRole('admin'), updateUserHandler);
+router.delete('/admin/users/:userId', requireAuth, requireRole('admin'), deleteUserHandler);
 router.get('/admin/events', requireAuth, requireRole('admin'), listEventsHandler);
 router.post('/admin/events', requireAuth, requireRole('admin'), createEventHandler);
 router.patch('/admin/events/:eventId', requireAuth, requireRole('admin'), updateEventHandler);
