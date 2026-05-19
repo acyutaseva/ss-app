@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { login } from '../services/auth.service.js';
 
-import { sendEmail } from '../services/email.service.js';
+import { sendTemplatedEmail } from '../services/email.service.js';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -30,10 +30,14 @@ export const sendTestEmailHandler = async (req: Request, res: Response) => {
     return res.status(400).json({ message: 'Missing or invalid "to" field' });
   }
   try {
-    await sendEmail({
+    await sendTemplatedEmail({
       to,
       subject: 'Test Email from Resend',
-      html: '<h1>This is a test email sent via Resend!</h1>'
+      template: 'testEmail',
+      context: {
+        title: 'This is a test email sent via Resend',
+        message: 'Your backend is now using a template engine for cleaner, reusable email formatting.'
+      }
     });
     res.json({ message: 'Email sent successfully' });
   } catch (err) {

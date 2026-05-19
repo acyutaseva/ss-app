@@ -138,6 +138,7 @@ export const StudentsPage = () => {
   const [editStudent, setEditStudent] = useState<EditStudentState | null>(null);
   const [editTab, setEditTab] = useState<'profile' | 'enrollment' | 'payment'>('profile');
   const [confirmAction, setConfirmAction] = useState<null | 'save' | 'archive' | 'delete'>(null);
+  const [togglingEnrollmentId, setTogglingEnrollmentId] = useState<string | null>(null);
 
   const resolveGroupIdFromSchoolYearId = (schoolYearId: string) => {
     const selectedSchoolYear = schoolYears.find((y) => y.id === schoolYearId);
@@ -234,6 +235,42 @@ export const StudentsPage = () => {
     }, token);
     setEditStudent(null);
     await loadRows();
+  };
+
+  const togglePaymentFromTable = async (row: StudentRow) => {
+    if (!token || !isAdmin || togglingEnrollmentId) return;
+    const nextIsPaid = !row.is_paid;
+    setTogglingEnrollmentId(row.enrollment_id);
+
+    // Optimistic UI update keeps the list responsive while the API call is in flight.
+    setRows((prev) => prev.map((item) => (
+      item.enrollment_id === row.enrollment_id
+        ? { ...item, is_paid: nextIsPaid }
+        : item
+    )));
+
+    try {
+      await apiFetch(`/admin/enrollments/${row.enrollment_id}/payment`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          isPaid: nextIsPaid,
+          paymentAmount: row.payment_amount ?? 125,
+          paymentNote: row.payment_note || undefined,
+          paidOn: nextIsPaid ? (row.paid_at ? toDateInputValue(row.paid_at) : undefined) : undefined
+        })
+      }, token);
+      await loadRows();
+    } catch (_err) {
+      // Roll back optimistic state if the request fails.
+      setRows((prev) => prev.map((item) => (
+        item.enrollment_id === row.enrollment_id
+          ? { ...item, is_paid: row.is_paid }
+          : item
+      )));
+      setError('Failed to update payment status');
+    } finally {
+      setTogglingEnrollmentId(null);
+    }
   };
 
   const runConfirmedAction = async () => {
@@ -373,9 +410,20 @@ export const StudentsPage = () => {
                 <td>{r.group_name}</td>
                 <td>{r.school_year_name}</td>
                 <td>
-                  <span className={r.is_paid ? 'payment-badge paid' : 'payment-badge unpaid'}>
-                    {r.is_paid ? 'Paid' : '! Unpaid'}
-                  </span>
+                  {isAdmin ? (
+                    <button
+                      className={r.is_paid ? 'payment-toggle payment-badge paid' : 'payment-toggle payment-badge unpaid'}
+                      onClick={() => togglePaymentFromTable(r)}
+                      disabled={togglingEnrollmentId === r.enrollment_id}
+                      title={r.is_paid ? 'Click to mark as unpaid' : 'Click to mark as paid'}
+                    >
+                      {r.is_paid ? 'Paid' : '! Unpaid'}
+                    </button>
+                  ) : (
+                    <span className={r.is_paid ? 'payment-badge paid' : 'payment-badge unpaid'}>
+                      {r.is_paid ? 'Paid' : '! Unpaid'}
+                    </span>
+                  )}
                   <p className="eyebrow">AUD {Number(r.payment_amount ?? 125).toFixed(2)}</p>
                 </td>
                 <td>
@@ -410,9 +458,20 @@ export const StudentsPage = () => {
               </div>
               <div className="row wrap">
                 <p>
-                  <span className={r.is_paid ? 'payment-badge paid' : 'payment-badge unpaid'}>
-                    {r.is_paid ? 'Paid' : '! Unpaid'}
-                  </span>
+                  {isAdmin ? (
+                    <button
+                      className={r.is_paid ? 'payment-toggle payment-badge paid' : 'payment-toggle payment-badge unpaid'}
+                      onClick={() => togglePaymentFromTable(r)}
+                      disabled={togglingEnrollmentId === r.enrollment_id}
+                      title={r.is_paid ? 'Click to mark as unpaid' : 'Click to mark as paid'}
+                    >
+                      {r.is_paid ? 'Paid' : '! Unpaid'}
+                    </button>
+                  ) : (
+                    <span className={r.is_paid ? 'payment-badge paid' : 'payment-badge unpaid'}>
+                      {r.is_paid ? 'Paid' : '! Unpaid'}
+                    </span>
+                  )}
                 </p>
                 <p className="eyebrow">AUD {Number(r.payment_amount ?? 125).toFixed(2)}</p>
                 {toDialPhone(r.mobile_number) && (

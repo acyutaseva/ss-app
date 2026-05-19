@@ -265,6 +265,22 @@ th, td { text-align:left; padding: 10px 6px; border-bottom: 1px solid var(--line
   background: #fff1d6;
   border: 1px solid #f0d8aa;
 }
+.payment-toggle {
+  cursor: pointer;
+  border-width: 1px;
+  border-style: solid;
+  font: inherit;
+  line-height: 1;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.payment-toggle:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px #1d2a1b1c;
+}
+.payment-toggle:disabled {
+  opacity: .65;
+  cursor: wait;
+}
 .contact-btn {
   text-decoration: none;
   display: inline-flex;

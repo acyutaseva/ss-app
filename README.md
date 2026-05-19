@@ -1,4 +1,4 @@
-# Hare Krishan Sunday School Attendance App
+# Hare Krishan Sunday School Application
 
 Browser-based attendance system for Hare Krishan Sunday School with `admin` and `teacher` roles.
 
