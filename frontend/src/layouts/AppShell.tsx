@@ -24,7 +24,7 @@ export const AppShell = () => {
             {user?.role === 'admin' && <NavLink to="/volunteers" className={navClass}>Volunteers</NavLink>}
             {user?.role === 'admin' && <NavLink to="/events" className={navClass}>Events</NavLink>}
             <NavLink to="/attendance" className={navClass}>Attendance</NavLink>
-            {user?.role === 'admin' && <NavLink to="/admin" className={navClass}>Admin</NavLink>}
+            {/* Admin link removed */}
             {user?.role === 'admin' && <NavLink to="/reports" className={navClass}>Reports</NavLink>}
           </nav>
 

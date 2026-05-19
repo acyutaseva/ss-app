@@ -4,7 +4,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { LoginPage } from './pages/LoginPage';
 import { AttendancePage } from './pages/AttendancePage';
 import { ReportsPage } from './pages/ReportsPage';
-import { AdminPage } from './pages/AdminPage';
+// import { AdminPage } from './pages/AdminPage';
 import { StudentsPage } from './pages/StudentsPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { EventsPage } from './pages/EventsPage';
@@ -25,14 +25,7 @@ function App() {
       >
         <Route index element={<DashboardPage />} />
         <Route path="attendance" element={<AttendancePage />} />
-        <Route
-          path="admin"
-          element={
-            <ProtectedRoute roles={['admin']}>
-              <AdminPage />
-            </ProtectedRoute>
-          }
-        />
+        {/* AdminPage route removed */}
         <Route
           path="students"
           element={
