@@ -355,8 +355,6 @@ export const EventsPage = () => {
                 <th>Group</th>
                 <th>Check In</th>
                 <th>Check Out</th>
-                <th>Dropped By</th>
-                <th>Picked By</th>
               </tr>
             </thead>
             <tbody>
@@ -366,8 +364,6 @@ export const EventsPage = () => {
                   <td>{r.group_name}</td>
                   <td>{r.checkin_time ? new Date(r.checkin_time).toLocaleString() : '-'}</td>
                   <td>{r.checkout_time ? new Date(r.checkout_time).toLocaleString() : '-'}</td>
-                  <td>{r.dropped_by || '-'}</td>
-                  <td>{r.picked_by_name || '-'}</td>
                 </tr>
               ))}
             </tbody>

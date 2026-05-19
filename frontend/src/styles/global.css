@@ -261,6 +261,19 @@ th, td { text-align:left; padding: 10px 6px; border-bottom: 1px solid var(--line
 .attendance-filter-control {
   min-width: 0;
 }
+.term-attendance-controls {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  align-items: center;
+}
+.term-attendance-date {
+  min-width: 0;
+}
+.term-attendance-generate {
+  width: auto;
+  justify-self: start;
+}
 .event-group-picker {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -376,6 +389,8 @@ th, td { text-align:left; padding: 10px 6px; border-bottom: 1px solid var(--line
   .event-row { flex-direction: column; }
   .event-actions { justify-content: flex-start; }
   .attendance-filters-row { grid-template-columns: 1fr; }
+  .term-attendance-controls { grid-template-columns: 1fr; }
+  .term-attendance-generate { justify-self: stretch; }
   .desktop-only { display: none; }
   .mobile-only { display: grid; }
 }
