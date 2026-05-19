@@ -261,6 +261,14 @@ th, td { text-align:left; padding: 10px 6px; border-bottom: 1px solid var(--line
 .attendance-filter-control {
   min-width: 0;
 }
+.audit-log-filters-row {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(320px, 2fr) minmax(180px, 1fr);
+}
+.audit-log-filter-control {
+  min-width: 0;
+}
 .term-attendance-controls {
   display: grid;
   gap: 8px;
@@ -389,6 +397,7 @@ th, td { text-align:left; padding: 10px 6px; border-bottom: 1px solid var(--line
   .event-row { flex-direction: column; }
   .event-actions { justify-content: flex-start; }
   .attendance-filters-row { grid-template-columns: 1fr; }
+  .audit-log-filters-row { grid-template-columns: 1fr; }
   .term-attendance-controls { grid-template-columns: 1fr; }
   .term-attendance-generate { justify-self: stretch; }
   .desktop-only { display: none; }

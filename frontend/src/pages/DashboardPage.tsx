@@ -162,7 +162,7 @@ export const DashboardPage = () => {
           <div className="payment-sub-grid" style={{ marginTop: 10 }}>
             <div className="card"><p className="eyebrow">Paid</p><h2>{summary.paidStudents}</h2></div>
             <div className="card"><p className="eyebrow">Unpaid</p><h2>{summary.unpaidStudents}</h2></div>
-            <div className="card"><p className="eyebrow">Total Payment Received</p><h2>{formatAudAmount(summary.totalPaymentReceived || 0)}</h2></div>
+            <div className="card"><p className="eyebrow">Received</p><h2>{formatAudAmount(summary.totalPaymentReceived || 0)}</h2></div>
           </div>
         </div>
 

@@ -9,6 +9,7 @@ import { StudentsPage } from './pages/StudentsPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { EventsPage } from './pages/EventsPage';
 import { VolunteersPage } from './pages/VolunteersPage';
+import { AuditLogsPage } from './pages/AuditLogsPage';
 
 function App() {
   return (
@@ -29,7 +30,7 @@ function App() {
         <Route
           path="students"
           element={
-            <ProtectedRoute roles={['admin']}>
+            <ProtectedRoute roles={['admin', 'teacher']}>
               <StudentsPage />
             </ProtectedRoute>
           }
@@ -45,7 +46,7 @@ function App() {
         <Route
           path="events"
           element={
-            <ProtectedRoute roles={['admin']}>
+            <ProtectedRoute roles={['admin', 'teacher']}>
               <EventsPage />
             </ProtectedRoute>
           }
@@ -55,6 +56,14 @@ function App() {
           element={
             <ProtectedRoute roles={['admin']}>
               <ReportsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="audit-logs"
+          element={
+            <ProtectedRoute roles={['admin']}>
+              <AuditLogsPage />
             </ProtectedRoute>
           }
         />

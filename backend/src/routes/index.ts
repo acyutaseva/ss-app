@@ -5,6 +5,7 @@ import { listStudentsHandler } from '../controllers/student.controller.js';
 import { listGroupsHandler } from '../controllers/group.controller.js';
 import { listSchoolYearsHandler } from '../controllers/schoolYear.controller.js';
 import { dashboardSummaryHandler } from '../controllers/dashboard.controller.js';
+import { listAuditLogsHandler } from '../controllers/audit.controller.js';
 import {
   createEventHandler,
   deleteEventHandler,
@@ -58,6 +59,7 @@ router.post('/admin/teachers', requireAuth, requireRole('admin'), createTeacherH
 router.post('/admin/teacher-groups', requireAuth, requireRole('admin'), assignTeacherGroupHandler);
 router.post('/admin/group-school-years', requireAuth, requireRole('admin'), assignGroupSchoolYearHandler);
 router.get('/admin/academic-years', requireAuth, requireRole('admin'), listAcademicYearsHandler);
+router.get('/admin/audit-logs', requireAuth, requireRole('admin'), listAuditLogsHandler);
 router.post('/admin/academic-years', requireAuth, requireRole('admin'), createAcademicYearHandler);
 router.post('/admin/academic-years/rollover', requireAuth, requireRole('admin'), rolloverAcademicYearHandler);
 router.patch('/admin/enrollments/:enrollmentId/payment', requireAuth, requireRole('admin'), updateEnrollmentPaymentHandler);

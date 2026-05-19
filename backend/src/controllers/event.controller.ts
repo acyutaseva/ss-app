@@ -40,7 +40,20 @@ export const listEventsHandler = async (req: Request, res: Response) => {
   const values: string[] = [];
 
   if (mode === 'attendance' && req.user?.role === 'teacher') {
-    sql += ` WHERE e.event_date > CURRENT_DATE OR (e.event_date = CURRENT_DATE AND e.end_time >= CURRENT_TIME)`;
+    values.push(req.user.id);
+    sql += `
+      WHERE (
+        NOT EXISTS (SELECT 1 FROM teacher_groups tg WHERE tg.teacher_id = $1)
+        OR e.applies_all_groups = true
+        OR EXISTS (
+          SELECT 1
+          FROM event_groups eg
+          JOIN teacher_groups tg ON tg.group_id = eg.group_id
+          WHERE eg.event_id = e.id
+            AND tg.teacher_id = $1
+        )
+      )
+    `;
   }
 
   sql += ` ORDER BY e.event_date DESC, e.start_time DESC`;

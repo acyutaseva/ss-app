@@ -9,7 +9,12 @@ export const dashboardSummaryHandler = async (req: Request, res: Response) => {
 
   if (req.user.role === 'teacher') {
     values.push(req.user.id);
-    teacherFilter = ` AND se.group_id IN (SELECT group_id FROM teacher_groups WHERE teacher_id = $${values.length})`;
+    teacherFilter = `
+      AND (
+        NOT EXISTS (SELECT 1 FROM teacher_groups WHERE teacher_id = $${values.length})
+        OR se.group_id IN (SELECT group_id FROM teacher_groups WHERE teacher_id = $${values.length})
+      )
+    `;
   }
 
   const baseFrom = `

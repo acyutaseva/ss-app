@@ -143,6 +143,7 @@ export const StudentsPage = () => {
   const [editTab, setEditTab] = useState<'profile' | 'enrollment' | 'payment'>('profile');
   const [confirmAction, setConfirmAction] = useState<null | 'save' | 'archive' | 'delete'>(null);
   const [togglingEnrollmentId, setTogglingEnrollmentId] = useState<string | null>(null);
+  const [viewStudent, setViewStudent] = useState<StudentRow | null>(null);
 
   const resolveGroupIdFromSchoolYearId = (schoolYearId: string) => {
     const selectedSchoolYear = schoolYears.find((y) => y.id === schoolYearId);
@@ -163,16 +164,25 @@ export const StudentsPage = () => {
 
   const loadLookups = async () => {
     if (!token) return;
-    const [groupData, yearData, schoolYearData] = await Promise.all([
+    const [groupData, schoolYearData] = await Promise.all([
       apiFetch<Group[]>('/groups', {}, token),
-      apiFetch<AcademicYear[]>('/admin/academic-years', {}, token),
       apiFetch<SchoolYear[]>('/school-years', {}, token)
     ]);
+
+    let yearData: AcademicYear[] = [];
+    if (isAdmin) {
+      yearData = await apiFetch<AcademicYear[]>('/admin/academic-years', {}, token);
+    }
+
     setGroups(groupData.map((g) => ({ id: g.id, name: g.name })));
     setYears(yearData);
     setSchoolYears(schoolYearData);
-    const active = yearData.find((y) => y.is_active);
-    if (active) setAcademicYear(active.year_label);
+    if (isAdmin) {
+      const active = yearData.find((y) => y.is_active);
+      if (active) setAcademicYear(active.year_label);
+    } else {
+      setAcademicYear('');
+    }
   };
 
   const loadRows = async () => {
@@ -414,12 +424,17 @@ export const StudentsPage = () => {
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.enrollment_id} className={r.is_paid ? 'student-row paid-row' : 'student-row unpaid-row'}>
+              <tr
+                key={r.enrollment_id}
+                className={r.is_paid ? 'student-row paid-row' : 'student-row unpaid-row'}
+                onClick={() => setViewStudent(r)}
+                style={{ cursor: 'pointer' }}
+              >
                 <td>{r.full_name}</td>
                 <td>{r.gender ? (r.gender === 'boy' ? 'Boy' : 'Girl') : '-'}</td>
                 <td>{r.group_name}</td>
                 <td>{r.school_year_name}</td>
-                <td>
+                <td onClick={(e) => e.stopPropagation()}>
                   {isAdmin ? (
                     <button
                       className={r.is_paid ? 'payment-toggle payment-badge paid' : 'payment-toggle payment-badge unpaid'}
@@ -436,7 +451,7 @@ export const StudentsPage = () => {
                   )}
                   <p className="eyebrow">AUD {Number(r.payment_amount ?? 125).toFixed(2)}</p>
                 </td>
-                <td>
+                <td onClick={(e) => e.stopPropagation()}>
                   <div className="row wrap">
                     {toDialPhone(r.mobile_number) && (
                       <a className="btn ghost contact-btn" href={`tel:${toDialPhone(r.mobile_number)}`}>Call</a>
@@ -447,7 +462,7 @@ export const StudentsPage = () => {
                   </div>
                 </td>
                 {isAdmin && (
-                  <td>
+                  <td onClick={(e) => e.stopPropagation()}>
                     <div className="row wrap">
                       <button className="btn ghost contact-btn edit-btn" onClick={() => { setEditStudent(toEditStudent(r)); setEditTab('profile'); }}>Edit</button>
                     </div>
@@ -460,14 +475,19 @@ export const StudentsPage = () => {
 
         <div className="mobile-only grid-list">
           {rows.map((r) => (
-            <article className={`card student ${r.is_paid ? 'paid-row' : 'unpaid-row'}`} key={`${r.enrollment_id}-mobile`}>
+            <article
+              className={`card student ${r.is_paid ? 'paid-row' : 'unpaid-row'}`}
+              key={`${r.enrollment_id}-mobile`}
+              onClick={() => setViewStudent(r)}
+              style={{ cursor: 'pointer' }}
+            >
               <div>
                 <h3>{r.full_name}</h3>
                 <p>{r.gender ? (r.gender === 'boy' ? 'Boy' : 'Girl') : '-'}</p>
                 <p>{r.group_name}</p>
                 <p>{r.school_year_name}</p>
               </div>
-              <div className="row wrap">
+              <div className="row wrap" onClick={(e) => e.stopPropagation()}>
                 <p>
                   {isAdmin ? (
                     <button
@@ -501,6 +521,67 @@ export const StudentsPage = () => {
           ))}
         </div>
       </div>
+
+      {viewStudent && (
+        <div className="modal-backdrop" onClick={() => setViewStudent(null)}>
+          <div className="modal-card student-modal-card" onClick={(e) => e.stopPropagation()}>
+            <h2>Student Details</h2>
+            <div className="form-grid student-edit-grid">
+              <label className="field">
+                <span className="field-label">Student Name</span>
+                <input value={viewStudent.full_name} readOnly />
+              </label>
+              <label className="field">
+                <span className="field-label">Gender</span>
+                <input value={viewStudent.gender ? (viewStudent.gender === 'boy' ? 'Boy' : 'Girl') : '-'} readOnly />
+              </label>
+              <label className="field">
+                <span className="field-label">Date of Birth</span>
+                <input value={toDateInputValue(viewStudent.date_of_birth) || '-'} readOnly />
+              </label>
+              <label className="field">
+                <span className="field-label">Group</span>
+                <input value={viewStudent.group_name} readOnly />
+              </label>
+              <label className="field">
+                <span className="field-label">School Year</span>
+                <input value={viewStudent.school_year_name} readOnly />
+              </label>
+              <label className="field">
+                <span className="field-label">Father Name</span>
+                <input value={viewStudent.father_name || '-'} readOnly />
+              </label>
+              <label className="field">
+                <span className="field-label">Mother Name</span>
+                <input value={viewStudent.mother_name || '-'} readOnly />
+              </label>
+              <label className="field">
+                <span className="field-label">Mobile Number</span>
+                <input value={viewStudent.mobile_number || '-'} readOnly />
+              </label>
+              <label className="field">
+                <span className="field-label">Email</span>
+                <input value={viewStudent.email || '-'} readOnly />
+              </label>
+              <label className="field field-span-2">
+                <span className="field-label">Current Address</span>
+                <textarea value={viewStudent.current_address || '-'} readOnly />
+              </label>
+              <label className="field field-span-2">
+                <span className="field-label">Hobbies / Interests</span>
+                <textarea value={viewStudent.hobbies_or_interests || '-'} readOnly />
+              </label>
+              <label className="field field-span-2">
+                <span className="field-label">Medical Needs / Allergies</span>
+                <textarea value={viewStudent.medical_needs_or_allergies || '-'} readOnly />
+              </label>
+              <div className="row student-edit-actions">
+                <button className="btn ghost" onClick={() => setViewStudent(null)}>Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <div className="row pagination-row">

@@ -23,12 +23,13 @@ export const AppShell = () => {
         <aside className="sidebar">
           <nav className="sidebar-nav">
             <NavLink to="/" end className={navClass}>Dashboard</NavLink>
-            {user?.role === 'admin' && <NavLink to="/students" className={navClass}>Students</NavLink>}
+            <NavLink to="/students" className={navClass}>Students</NavLink>
             {user?.role === 'admin' && <NavLink to="/volunteers" className={navClass}>Volunteers</NavLink>}
-            {user?.role === 'admin' && <NavLink to="/events" className={navClass}>Events</NavLink>}
+            <NavLink to="/events" className={navClass}>Events</NavLink>
             <NavLink to="/attendance" className={navClass}>Attendance</NavLink>
             {/* Admin link removed */}
             {user?.role === 'admin' && <NavLink to="/reports" className={navClass}>Reports</NavLink>}
+            {user?.role === 'admin' && <NavLink to="/audit-logs" className={navClass}>Audit Logs</NavLink>}
           </nav>
 
         </aside>

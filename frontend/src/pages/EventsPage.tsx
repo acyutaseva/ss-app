@@ -76,7 +76,8 @@ const getEventGroupLabel = (event: EventRow, groups: Group[]) => {
 };
 
 export const EventsPage = () => {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [events, setEvents] = useState<EventRow[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [eventsPage, setEventsPage] = useState(1);
@@ -99,6 +100,7 @@ export const EventsPage = () => {
   });
   const [editForm, setEditForm] = useState<EditEventState | null>(null);
   const [confirmDeleteEvent, setConfirmDeleteEvent] = useState<EventRow | null>(null);
+  const [viewEvent, setViewEvent] = useState<EventRow | null>(null);
   const eventsPageSize = 5;
   const attendancePageSize = 10;
   const formatDateOnly = (value: string) => value?.includes('T') ? value.split('T')[0] : value;
@@ -137,7 +139,7 @@ export const EventsPage = () => {
 
   const loadEvents = async () => {
     if (!token) return;
-    const data = await apiFetch<EventRow[]>('/admin/events', {}, token);
+    const data = await apiFetch<EventRow[]>(isAdmin ? '/admin/events' : '/events', {}, token);
     setEvents(data);
     if (!data.length) {
       setSelectedEventId('');
@@ -151,7 +153,7 @@ export const EventsPage = () => {
   };
 
   const loadAttendance = async (eventId: string) => {
-    if (!token || !eventId) return;
+    if (!token || !eventId || !isAdmin) return;
     const rows = await apiFetch<AttendanceRow[]>(`/admin/events/${eventId}/attendance`, {}, token);
     setAttendance(rows);
   };
@@ -159,7 +161,7 @@ export const EventsPage = () => {
   useEffect(() => {
     loadEvents().catch(() => setError('Failed to load events'));
     loadGroups().catch(() => setError('Failed to load groups'));
-  }, [token]);
+  }, [token, isAdmin]);
 
   useEffect(() => {
     if (eventsPage > totalEventsPages) {
@@ -168,8 +170,8 @@ export const EventsPage = () => {
   }, [eventsPage, totalEventsPages]);
 
   useEffect(() => {
-    if (selectedEventId) loadAttendance(selectedEventId).catch(() => setError('Failed to load event attendance'));
-  }, [selectedEventId]);
+    if (isAdmin && selectedEventId) loadAttendance(selectedEventId).catch(() => setError('Failed to load event attendance'));
+  }, [selectedEventId, isAdmin]);
 
   useEffect(() => {
     setAttendancePage(1);
@@ -262,7 +264,7 @@ export const EventsPage = () => {
       <div className="card">
         <div className="row wrap" style={{ justifyContent: 'space-between' }}>
           <h2>Events</h2>
-          <button className="btn primary" onClick={() => { setAddError(''); setShowAddEvent(true); }}>Add Event</button>
+          {isAdmin && <button className="btn primary" onClick={() => { setAddError(''); setShowAddEvent(true); }}>Add Event</button>}
         </div>
         {msg && <p className="ok">{msg}</p>}
         {error && <p className="error">{error}</p>}
@@ -277,24 +279,26 @@ export const EventsPage = () => {
               <th>Time</th>
               <th>Mode</th>
               <th>Groups</th>
-              <th>Actions</th>
+              {isAdmin && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {eventsPageRows.map((ev) => (
-              <tr key={ev.id}>
+              <tr key={ev.id} onClick={() => setViewEvent(ev)} style={{ cursor: 'pointer' }}>
                 <td>{ev.name}</td>
                 <td>{formatDateOnly(ev.event_date)}</td>
                 <td>{formatTimeOnly(ev.start_time)} - {formatTimeOnly(ev.end_time)}</td>
                 <td>{ev.attendance_mode === 'checkin_only' ? 'Check-in Only' : 'Full'}</td>
                 <td>{getEventGroupLabel(ev, groups)}</td>
-                <td>
-                  <div className="row wrap">
-                    <button className="btn ghost contact-btn" onClick={() => setSelectedEventId(ev.id)}>Attendance</button>
-                    <button className="btn ghost contact-btn edit-btn" onClick={() => setEditForm(toEventForm(ev))}>Edit</button>
-                    <button className="btn warn contact-btn" onClick={() => setConfirmDeleteEvent(ev)}>Delete</button>
-                  </div>
-                </td>
+                {isAdmin && (
+                  <td>
+                    <div className="row wrap" onClick={(e) => e.stopPropagation()}>
+                      <button className="btn ghost contact-btn" onClick={() => setSelectedEventId(ev.id)}>Attendance</button>
+                      <button className="btn ghost contact-btn edit-btn" onClick={() => setEditForm(toEventForm(ev))}>Edit</button>
+                      <button className="btn warn contact-btn" onClick={() => setConfirmDeleteEvent(ev)}>Delete</button>
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -302,7 +306,7 @@ export const EventsPage = () => {
 
         <div className="mobile-only grid-list">
           {eventsPageRows.map((ev) => (
-            <article key={`${ev.id}-mobile`} className="card student">
+            <article key={`${ev.id}-mobile`} className="card student" onClick={() => setViewEvent(ev)} style={{ cursor: 'pointer' }}>
               <div>
                 <h3>{ev.name}</h3>
                 <p>{formatDateOnly(ev.event_date)}</p>
@@ -310,11 +314,13 @@ export const EventsPage = () => {
                 <p>{ev.attendance_mode === 'checkin_only' ? 'Check-in Only' : 'Full'}</p>
                 <p>{getEventGroupLabel(ev, groups)}</p>
               </div>
-              <div className="row wrap">
-                <button className="btn ghost contact-btn" onClick={() => setSelectedEventId(ev.id)}>Attendance</button>
-                <button className="btn ghost contact-btn edit-btn" onClick={() => setEditForm(toEventForm(ev))}>Edit</button>
-                <button className="btn warn contact-btn" onClick={() => setConfirmDeleteEvent(ev)}>Delete</button>
-              </div>
+              {isAdmin && (
+                <div className="row wrap" onClick={(e) => e.stopPropagation()}>
+                  <button className="btn ghost contact-btn" onClick={() => setSelectedEventId(ev.id)}>Attendance</button>
+                  <button className="btn ghost contact-btn edit-btn" onClick={() => setEditForm(toEventForm(ev))}>Edit</button>
+                  <button className="btn warn contact-btn" onClick={() => setConfirmDeleteEvent(ev)}>Delete</button>
+                </div>
+              )}
             </article>
           ))}
         </div>
@@ -339,58 +345,60 @@ export const EventsPage = () => {
         )}
       </div>
 
-      <div className="card">
-        <h2>Event Attendance</h2>
-        <div className="row wrap">
-          <select value={selectedEventId} onChange={(e) => setSelectedEventId(e.target.value)}>
-            <option value="">Select event</option>
-            {events.map((ev) => <option key={ev.id} value={ev.id}>{ev.name} ({formatDateOnly(ev.event_date)})</option>)}
-          </select>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Student</th>
-                <th>Group</th>
-                <th>Check In</th>
-                <th>Check Out</th>
-              </tr>
-            </thead>
-            <tbody>
-              {attendancePageRows.map((r, i) => (
-                <tr key={`${r.full_name}-${i}`}>
-                  <td>{r.full_name}</td>
-                  <td>{r.group_name}</td>
-                  <td>{r.checkin_time ? new Date(r.checkin_time).toLocaleString() : '-'}</td>
-                  <td>{r.checkout_time ? new Date(r.checkout_time).toLocaleString() : '-'}</td>
+      {isAdmin && (
+        <div className="card">
+          <h2>Event Attendance</h2>
+          <div className="row wrap">
+            <select value={selectedEventId} onChange={(e) => setSelectedEventId(e.target.value)}>
+              <option value="">Select event</option>
+              {events.map((ev) => <option key={ev.id} value={ev.id}>{ev.name} ({formatDateOnly(ev.event_date)})</option>)}
+            </select>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Group</th>
+                  <th>Check In</th>
+                  <th>Check Out</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          {!!attendance.length && (
-            <div className="row wrap pagination-row" style={{ marginTop: 10 }}>
-              <button
-                className="btn ghost"
-                disabled={attendancePage <= 1}
-                onClick={() => setAttendancePage((p) => Math.max(1, p - 1))}
-              >
-                Prev
-              </button>
-              <p className="eyebrow">Page {attendancePage} of {totalAttendancePages}</p>
-              <button
-                className="btn ghost"
-                disabled={attendancePage >= totalAttendancePages}
-                onClick={() => setAttendancePage((p) => Math.min(totalAttendancePages, p + 1))}
-              >
-                Next
-              </button>
-            </div>
-          )}
+              </thead>
+              <tbody>
+                {attendancePageRows.map((r, i) => (
+                  <tr key={`${r.full_name}-${i}`}>
+                    <td>{r.full_name}</td>
+                    <td>{r.group_name}</td>
+                    <td>{r.checkin_time ? new Date(r.checkin_time).toLocaleString() : '-'}</td>
+                    <td>{r.checkout_time ? new Date(r.checkout_time).toLocaleString() : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!!attendance.length && (
+              <div className="row wrap pagination-row" style={{ marginTop: 10 }}>
+                <button
+                  className="btn ghost"
+                  disabled={attendancePage <= 1}
+                  onClick={() => setAttendancePage((p) => Math.max(1, p - 1))}
+                >
+                  Prev
+                </button>
+                <p className="eyebrow">Page {attendancePage} of {totalAttendancePages}</p>
+                <button
+                  className="btn ghost"
+                  disabled={attendancePage >= totalAttendancePages}
+                  onClick={() => setAttendancePage((p) => Math.min(totalAttendancePages, p + 1))}
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {showAddEvent && (
+      {isAdmin && showAddEvent && (
         <div className="modal-backdrop" onClick={() => { setAddError(''); setShowAddEvent(false); }}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <h2>Add Event</h2>
@@ -464,7 +472,7 @@ export const EventsPage = () => {
         </div>
       )}
 
-      {editForm && (
+      {isAdmin && editForm && (
         <div className="modal-backdrop" onClick={() => setEditForm(null)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <h2>Edit Event</h2>
@@ -537,7 +545,7 @@ export const EventsPage = () => {
         </div>
       )}
 
-      {confirmDeleteEvent && (
+      {isAdmin && confirmDeleteEvent && (
         <div className="modal-backdrop" onClick={() => setConfirmDeleteEvent(null)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <h2>Confirm Delete</h2>
@@ -545,6 +553,43 @@ export const EventsPage = () => {
             <div className="row" style={{ marginTop: 12 }}>
               <button className="btn warn" onClick={() => deleteEvent().catch(() => setError('Failed to delete event'))}>Confirm</button>
               <button className="btn ghost" onClick={() => setConfirmDeleteEvent(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewEvent && (
+        <div className="modal-backdrop" onClick={() => setViewEvent(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <h2>Event Details</h2>
+            <div className="form-grid">
+              <label className="field">
+                <span className="field-label">Event Name</span>
+                <input value={viewEvent.name} readOnly />
+              </label>
+              <label className="field">
+                <span className="field-label">Event Date</span>
+                <input value={formatDateOnly(viewEvent.event_date)} readOnly />
+              </label>
+              <label className="field">
+                <span className="field-label">Time</span>
+                <input value={`${formatTimeOnly(viewEvent.start_time)} - ${formatTimeOnly(viewEvent.end_time)}`} readOnly />
+              </label>
+              <label className="field">
+                <span className="field-label">Attendance Mode</span>
+                <input value={viewEvent.attendance_mode === 'checkin_only' ? 'Check-in Only' : 'Full'} readOnly />
+              </label>
+              <label className="field field-span-2">
+                <span className="field-label">Groups</span>
+                <input value={getEventGroupLabel(viewEvent, groups)} readOnly />
+              </label>
+              <label className="field field-span-2">
+                <span className="field-label">Notes</span>
+                <textarea value={viewEvent.notes || '-'} readOnly />
+              </label>
+              <div className="row">
+                <button className="btn ghost" onClick={() => setViewEvent(null)}>Close</button>
+              </div>
             </div>
           </div>
         </div>
