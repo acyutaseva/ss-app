@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { loginHandler } from '../controllers/auth.controller.js';
+import { sendTestEmailHandler } from '../controllers/auth.controller.js';
 import { checkInHandler, checkOutHandler, termReportHandler } from '../controllers/attendance.controller.js';
 import { listStudentsHandler } from '../controllers/student.controller.js';
 import { listGroupsHandler } from '../controllers/group.controller.js';
@@ -35,6 +36,9 @@ import { requireAuth, requireRole } from '../middleware/auth.js';
 const router = Router();
 
 router.post('/auth/login', loginHandler);
+
+// Route to send a test email
+router.post('/auth/send-test-email', sendTestEmailHandler);
 
 router.get('/students', requireAuth, requireRole('admin', 'teacher'), listStudentsHandler);
 router.get('/groups', requireAuth, requireRole('admin', 'teacher'), listGroupsHandler);
