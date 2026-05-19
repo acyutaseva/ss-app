@@ -145,9 +145,9 @@ WITH mapped AS (
   FROM tmp_student_import t
   JOIN school_years sy ON sy.name = t.school_year_name
   JOIN groups g ON g.name = CASE
-    WHEN sy.name IN ('Kindy', 'Pre Primary') THEN 'Gopal Group - Kindy and Pre Primary'
-    WHEN sy.name IN ('Year 1', 'Year 2', 'Year 3') THEN 'Madhava Group - Year 1 to Year 3'
-    WHEN sy.name IN ('Year 4', 'Year 5', 'Year 6') THEN 'Gauranga Group - Year 4 to Year 6'
+    WHEN sy.name IN ('Kindy', 'Pre Primary') THEN 'Gopal Group'
+    WHEN sy.name IN ('Year 1', 'Year 2', 'Year 3') THEN 'Madhava Group'
+    WHEN sy.name IN ('Year 4', 'Year 5', 'Year 6') THEN 'Gauranga Group'
     ELSE NULL
   END
 ),

@@ -38,6 +38,7 @@ export const listStudentsHandler = async (req: Request, res: Response) => {
     FROM students s
     JOIN student_enrollments se ON se.student_id = s.id
     JOIN groups g ON g.id = se.group_id
+    JOIN school_years sy ON sy.id = se.school_year_id
     JOIN academic_years ay ON ay.id = se.academic_year_id
     WHERE se.status = 'active'
     ${where.length ? `AND ${where.join(' AND ')}` : ''}
@@ -68,6 +69,7 @@ export const listStudentsHandler = async (req: Request, res: Response) => {
       se.paid_at,
       se.payment_note,
       g.name AS group_name,
+      sy.name AS school_year_name,
       ay.year_label AS academic_year
     ${baseFromWhere}
     ORDER BY s.full_name

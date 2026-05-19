@@ -40,11 +40,27 @@ export const dashboardSummaryHandler = async (req: Request, res: Response) => {
     ${baseWhere}
   `;
 
-  const [totalStudents, paid, unpaid, todayAttendance] = await Promise.all([
+  const birthdaysThisMonthSql = `
+    SELECT
+      s.id,
+      s.full_name,
+      s.date_of_birth,
+      g.name AS group_name
+    ${baseFrom}
+    JOIN students s ON s.id = se.student_id
+    JOIN groups g ON g.id = se.group_id
+    ${baseWhere}
+      AND s.date_of_birth IS NOT NULL
+      AND EXTRACT(MONTH FROM s.date_of_birth) = EXTRACT(MONTH FROM CURRENT_DATE)
+    ORDER BY EXTRACT(DAY FROM s.date_of_birth), s.full_name
+  `;
+
+  const [totalStudents, paid, unpaid, todayAttendance, birthdaysThisMonth] = await Promise.all([
     pool.query(totalStudentsSql, values),
     pool.query(paidSql, values),
     pool.query(unpaidSql, values),
-    pool.query(todayAttendanceSql, values)
+    pool.query(todayAttendanceSql, values),
+    pool.query(birthdaysThisMonthSql, values)
   ]);
 
   return res.json({
@@ -53,6 +69,7 @@ export const dashboardSummaryHandler = async (req: Request, res: Response) => {
     unpaidStudents: unpaid.rows[0]?.count || 0,
     todayCheckedIn: todayAttendance.rows[0]?.checked_in || 0,
     todayCheckedOut: todayAttendance.rows[0]?.checked_out || 0,
-    todayPendingPickup: todayAttendance.rows[0]?.pending_pickup || 0
+    todayPendingPickup: todayAttendance.rows[0]?.pending_pickup || 0,
+    birthdaysThisMonth: birthdaysThisMonth.rows
   });
 };

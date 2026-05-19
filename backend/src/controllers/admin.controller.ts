@@ -48,18 +48,21 @@ const rolloverSchema = z.object({
 
 const updatePaymentSchema = z.object({
   isPaid: z.boolean(),
-  paymentNote: z.string().max(500).optional()
+  paymentNote: z.string().max(500).optional(),
+  paidOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
 });
 
 const createUserSchema = z.object({
   name: z.string().min(2).max(120),
   email: z.string().email(),
+  phoneNumber: z.string().max(40).optional(),
   role: z.enum(['admin', 'teacher']),
   password: z.string().min(6)
 });
 
 const updateUserSchema = z.object({
   name: z.string().min(2).max(120),
+  phoneNumber: z.string().max(40).optional(),
   role: z.enum(['admin', 'teacher']),
   isActive: z.boolean(),
   password: z.string().min(6).optional()
@@ -319,24 +322,41 @@ export const updateEnrollmentPaymentHandler = async (req: Request, res: Response
     `UPDATE student_enrollments
      SET
        is_paid = $1,
-       paid_at = CASE WHEN $1 THEN NOW() ELSE NULL END,
+       paid_at = CASE WHEN $1 THEN COALESCE(($3::date)::timestamp, NOW()) ELSE NULL END,
        payment_note = $2
-     WHERE id = $3
+     WHERE id = $4
      RETURNING id, is_paid, paid_at, payment_note`,
-    [d.isPaid, d.paymentNote || null, enrollmentId]
+    [d.isPaid, d.paymentNote || null, d.paidOn || null, enrollmentId]
   );
 
   if (!result.rowCount) return res.status(404).json({ message: 'Enrollment not found' });
   return res.json(result.rows[0]);
 };
 
-export const listUsersHandler = async (_req: Request, res: Response) => {
+export const listUsersHandler = async (req: Request, res: Response) => {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(15, Math.max(1, Number(req.query.pageSize || 15)));
+  const offset = (page - 1) * pageSize;
+
+  const countResult = await pool.query('SELECT COUNT(*)::int AS total FROM users');
+  const total = countResult.rows[0]?.total || 0;
+
   const result = await pool.query(
-    `SELECT id, name, email, role, is_active, created_at
+    `SELECT id, name, email, phone_number, role, is_active, created_at
      FROM users
-     ORDER BY created_at DESC`
+     ORDER BY created_at DESC
+     LIMIT $1
+     OFFSET $2`,
+    [pageSize, offset]
   );
-  return res.json(result.rows);
+
+  return res.json({
+    items: result.rows,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize))
+  });
 };
 
 export const createUserHandler = async (req: Request, res: Response) => {
@@ -346,15 +366,16 @@ export const createUserHandler = async (req: Request, res: Response) => {
   const passwordHash = await bcrypt.hash(d.password, 10);
 
   const result = await pool.query(
-    `INSERT INTO users (name, email, password_hash, role, is_active)
-     VALUES ($1, $2, $3, $4, true)
+    `INSERT INTO users (name, email, phone_number, password_hash, role, is_active)
+     VALUES ($1, $2, $3, $4, $5, true)
      ON CONFLICT (email) DO UPDATE SET
        name = EXCLUDED.name,
+       phone_number = EXCLUDED.phone_number,
        password_hash = EXCLUDED.password_hash,
        role = EXCLUDED.role,
        is_active = true
-     RETURNING id, name, email, role, is_active`,
-    [d.name, d.email, passwordHash, d.role]
+     RETURNING id, name, email, phone_number, role, is_active`,
+    [d.name, d.email, d.phoneNumber || null, passwordHash, d.role]
   );
   return res.status(201).json(result.rows[0]);
 };
@@ -370,10 +391,10 @@ export const updateUserHandler = async (req: Request, res: Response) => {
     const passwordHash = await bcrypt.hash(d.password, 10);
     const result = await pool.query(
       `UPDATE users
-       SET name = $1, role = $2, is_active = $3, password_hash = $4
-       WHERE id = $5
-       RETURNING id, name, email, role, is_active`,
-      [d.name, d.role, d.isActive, passwordHash, userId]
+       SET name = $1, role = $2, is_active = $3, phone_number = COALESCE($4, phone_number), password_hash = $5
+       WHERE id = $6
+       RETURNING id, name, email, phone_number, role, is_active`,
+      [d.name, d.role, d.isActive, d.phoneNumber || null, passwordHash, userId]
     );
     if (!result.rowCount) return res.status(404).json({ message: 'User not found' });
     return res.json(result.rows[0]);
@@ -381,10 +402,10 @@ export const updateUserHandler = async (req: Request, res: Response) => {
 
   const result = await pool.query(
     `UPDATE users
-     SET name = $1, role = $2, is_active = $3
-     WHERE id = $4
-     RETURNING id, name, email, role, is_active`,
-    [d.name, d.role, d.isActive, userId]
+     SET name = $1, role = $2, is_active = $3, phone_number = COALESCE($4, phone_number)
+     WHERE id = $5
+     RETURNING id, name, email, phone_number, role, is_active`,
+    [d.name, d.role, d.isActive, d.phoneNumber || null, userId]
   );
   if (!result.rowCount) return res.status(404).json({ message: 'User not found' });
   return res.json(result.rows[0]);
@@ -397,12 +418,27 @@ export const updateStudentHandler = async (req: Request, res: Response) => {
   if (!parsed.success) return res.status(400).json({ message: 'Invalid input' });
   const d = parsed.data;
 
-  const allowed = await pool.query(
-    `SELECT 1 FROM group_school_years WHERE group_id = $1 AND school_year_id = $2 LIMIT 1`,
-    [d.groupId, d.schoolYearId]
+  const currentEnrollment = await pool.query(
+    `SELECT group_id, school_year_id
+     FROM student_enrollments
+     WHERE id = $1 AND student_id = $2
+     LIMIT 1`,
+    [d.enrollmentId, studentId]
   );
-  if (!allowed.rowCount) {
-    return res.status(400).json({ message: 'Selected school year is not mapped to selected group' });
+  if (!currentEnrollment.rowCount) {
+    return res.status(404).json({ message: 'Enrollment not found' });
+  }
+
+  const current = currentEnrollment.rows[0];
+  const mappingChanged = current.group_id !== d.groupId || current.school_year_id !== d.schoolYearId;
+  if (mappingChanged) {
+    const allowed = await pool.query(
+      `SELECT 1 FROM group_school_years WHERE group_id = $1 AND school_year_id = $2 LIMIT 1`,
+      [d.groupId, d.schoolYearId]
+    );
+    if (!allowed.rowCount) {
+      return res.status(400).json({ message: 'Selected school year is not mapped to selected group' });
+    }
   }
 
   const client = await pool.connect();

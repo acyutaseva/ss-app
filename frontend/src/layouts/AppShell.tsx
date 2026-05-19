@@ -1,32 +1,44 @@
-import { Link, Outlet } from 'react-router-dom';
+import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export const AppShell = () => {
   const { user, logout } = useAuth();
 
+  const navClass = ({ isActive }: { isActive: boolean }) => `nav-item${isActive ? ' active' : ''}`;
+
   return (
-    <div className="app-shell">
-      <header className="topbar">
+    <div className="page-shell">
+      <header className="app-header">
         <div>
           <p className="eyebrow">Hare Krishan Sunday School</p>
-          <h1>Attendance Console</h1>
+          <h2>Student Management</h2>
         </div>
-        <button className="btn ghost" onClick={logout}>Logout</button>
+        <p className="eyebrow">{user?.role === 'admin' ? 'Admin' : 'Teacher'} Login</p>
       </header>
 
-      <nav className="tabs">
-        <Link to="/">Dashboard</Link>
-        {user?.role === 'admin' && <Link to="/students">Students</Link>}
-        {user?.role === 'admin' && <Link to="/volunteers">Volunteers</Link>}
-        <Link to="/attendance">Attendance</Link>
-        {user?.role === 'admin' && <Link to="/events">Events</Link>}
-        {user?.role === 'admin' && <Link to="/admin">Admin</Link>}
-        {user?.role === 'admin' && <Link to="/reports">Reports</Link>}
-      </nav>
+      <div className="app-shell">
+        <aside className="sidebar">
+          <nav className="sidebar-nav">
+            <NavLink to="/" end className={navClass}>Dashboard</NavLink>
+            {user?.role === 'admin' && <NavLink to="/students" className={navClass}>Students</NavLink>}
+            {user?.role === 'admin' && <NavLink to="/volunteers" className={navClass}>Volunteers</NavLink>}
+            <NavLink to="/attendance" className={navClass}>Attendance</NavLink>
+            {user?.role === 'admin' && <NavLink to="/events" className={navClass}>Events</NavLink>}
+            {user?.role === 'admin' && <NavLink to="/admin" className={navClass}>Admin</NavLink>}
+            {user?.role === 'admin' && <NavLink to="/reports" className={navClass}>Reports</NavLink>}
+          </nav>
 
-      <main className="content">
-        <Outlet />
-      </main>
+          <button className="btn ghost sidebar-logout" onClick={logout}>Logout</button>
+        </aside>
+
+        <main className="main-panel">
+          <Outlet />
+        </main>
+      </div>
+
+      <footer className="app-footer">
+        <p>Hare Krishan Sunday School - ISKCON Perth</p>
+      </footer>
     </div>
   );
 };

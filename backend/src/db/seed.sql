@@ -13,9 +13,9 @@ SET
 
 INSERT INTO groups (name, whatsapp_link)
 VALUES
-  ('Gopal Group - Kindy and Pre Primary', NULL),
-  ('Madhava Group - Year 1 to Year 3', NULL),
-  ('Gauranga Group - Year 4 to Year 6', NULL)
+  ('Gopal Group', NULL),
+  ('Madhava Group', NULL),
+  ('Gauranga Group', NULL)
 ON CONFLICT (name) DO UPDATE
 SET whatsapp_link = EXCLUDED.whatsapp_link;
 
@@ -41,9 +41,9 @@ INSERT INTO group_school_years (group_id, school_year_id)
 SELECT g.id, sy.id
 FROM groups g
 JOIN school_years sy ON
-  (g.name = 'Gopal Group - Kindy and Pre Primary' AND sy.name IN ('Kindy', 'Pre Primary'))
-  OR (g.name = 'Madhava Group - Year 1 to Year 3' AND sy.name IN ('Year 1', 'Year 2', 'Year 3'))
-  OR (g.name = 'Gauranga Group - Year 4 to Year 6' AND sy.name IN ('Year 4', 'Year 5', 'Year 6'))
+  (g.name = 'Gopal Group' AND sy.name IN ('Kindy', 'Pre Primary'))
+  OR (g.name = 'Madhava Group' AND sy.name IN ('Year 1', 'Year 2', 'Year 3'))
+  OR (g.name = 'Gauranga Group' AND sy.name IN ('Year 4', 'Year 5', 'Year 6'))
 ON CONFLICT (group_id, school_year_id) DO NOTHING;
 
 INSERT INTO events (name, event_date, start_time, end_time, notes)
