@@ -108,7 +108,7 @@ export const AttendancePage = () => {
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [events, setEvents] = useState<EventRow[]>([]);
   const [selectedEventId, setSelectedEventId] = useState('');
-  const [attendanceTab, setAttendanceTab] = useState<'checkin' | 'checkout'>('checkin');
+  const [attendanceTab, setAttendanceTab] = useState<'checkin' | 'checkout' | 'attended'>('checkin');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [submittingStudentId, setSubmittingStudentId] = useState<string | null>(null);
   const [showCheckinSignatureDialog, setShowCheckinSignatureDialog] = useState(false);
@@ -225,6 +225,13 @@ export const AttendancePage = () => {
   }, [isCheckinOnlyEvent, attendanceTab]);
 
   const filteredStudents = useMemo(() => {
+    if (attendanceTab === 'attended') {
+      if (isCheckinOnlyEvent) {
+        return students.filter((student) => Boolean(student.checkin_time));
+      }
+      return students.filter((student) => Boolean(student.checkin_time) && Boolean(student.checkout_time));
+    }
+
     if (isCheckinOnlyEvent) {
       return students.filter((student) => !student.checkin_time);
     }
@@ -236,6 +243,12 @@ export const AttendancePage = () => {
 
   const pendingCheckinCount = useMemo(() => students.filter((s) => !s.checkin_time).length, [students]);
   const pendingCheckoutCount = useMemo(() => students.filter((s) => Boolean(s.checkin_time) && !s.checkout_time).length, [students]);
+  const attendedCount = useMemo(() => {
+    if (isCheckinOnlyEvent) {
+      return students.filter((s) => Boolean(s.checkin_time)).length;
+    }
+    return students.filter((s) => Boolean(s.checkin_time) && Boolean(s.checkout_time)).length;
+  }, [students, isCheckinOnlyEvent]);
 
   const markStudentAttendanceLocally = (studentId: string, action: 'checkin' | 'checkout') => {
     const nowIso = new Date().toISOString();
@@ -482,6 +495,32 @@ export const AttendancePage = () => {
     }
   };
 
+  const undoCheckIn = async (studentId: string) => {
+    if (!token || !selectedEventId) return;
+    try {
+      await apiFetch(`/attendance/undo-checkin`, {
+        method: 'POST',
+        body: JSON.stringify({
+          studentId,
+          eventId: selectedEventId
+        })
+      }, token);
+      setMsg('Check-in undone successfully');
+      void loadStudents().catch(() => setMsg('Undo successful. Student list refresh failed; it will auto-refresh shortly.'));
+    } catch (err) {
+      let errorMsg = 'Failed to undo check-in';
+      if (err && typeof err === 'object') {
+        if ('message' in err && typeof err.message === 'string') {
+          errorMsg = err.message;
+        } else if (err instanceof Error) {
+          errorMsg = err.message;
+        }
+      }
+      setMsg(errorMsg);
+      console.error('Undo check-in error:', err);
+    }
+  };
+
   const handleMobileAttendanceAction = async (student: Student) => {
     if (!selectedEventId || submittingStudentId) return;
     if (attendanceTab === 'checkin') {
@@ -547,13 +586,16 @@ export const AttendancePage = () => {
 
       <div className="dialog-tabs attendance-tabs" style={{ marginTop: 10 }}>
         <button className={attendanceTab === 'checkin' ? 'tab-btn active' : 'tab-btn'} onClick={() => setAttendanceTab('checkin')}>
-          Checkin Pending ({pendingCheckinCount})
+          Checkin ({pendingCheckinCount})
         </button>
         {!isCheckinOnlyEvent && (
           <button className={attendanceTab === 'checkout' ? 'tab-btn active' : 'tab-btn'} onClick={() => setAttendanceTab('checkout')}>
-            Checkout Pending ({pendingCheckoutCount})
+            Checkout ({pendingCheckoutCount})
           </button>
         )}
+        <button className={attendanceTab === 'attended' ? 'tab-btn active' : 'tab-btn'} onClick={() => setAttendanceTab('attended')}>
+          Attended ({attendedCount})
+        </button>
         {isCheckinOnlyEvent && (
           <span className="eyebrow" style={{ marginLeft: 'auto', alignSelf: 'center' }}>Check-in only event</span>
         )}
@@ -579,8 +621,12 @@ export const AttendancePage = () => {
                 )}
                 {attendanceTab === 'checkin' ? (
                   <button className="btn success" disabled={!selectedEventId} onClick={() => checkIn(student.id)}>Check In</button>
-                ) : (
+                ) : attendanceTab === 'checkout' ? (
                   <button className="btn warn" disabled={!selectedEventId} onClick={() => checkOut(student.id)}>Check Out</button>
+                ) : (
+                  <span className="eyebrow" style={{ alignSelf: 'center' }}>
+                    {isCheckinOnlyEvent ? 'Checked In' : 'Checked In & Out'}
+                  </span>
                 )}
               </div>
             </article>
@@ -608,7 +654,7 @@ export const AttendancePage = () => {
                   >
                     {submittingStudentId === student.id ? 'Saving...' : 'Check In'}
                   </button>
-                ) : (
+                ) : attendanceTab === 'checkout' ? (
                   <button
                     type="button"
                     className={`btn attendance-mobile-inline-action ${submittingStudentId === student.id ? 'saving' : 'warn'}`}
@@ -617,6 +663,10 @@ export const AttendancePage = () => {
                   >
                     {submittingStudentId === student.id ? 'Saving...' : 'Check Out'}
                   </button>
+                ) : (
+                  <span className="eyebrow" style={{ whiteSpace: 'nowrap' }}>
+                    {isCheckinOnlyEvent ? 'Checked In' : 'Done'}
+                  </span>
                 )}
                 {toDialPhone(student.mobile_number) && (
                   <a
@@ -651,7 +701,11 @@ export const AttendancePage = () => {
         ))}
         {!filteredStudents.length && (
           <article className="card">
-            <p className="eyebrow">No students pending {attendanceTab === 'checkin' ? 'check-in' : 'check-out'}.</p>
+            <p className="eyebrow">
+              {attendanceTab === 'attended'
+                ? 'No students attended yet.'
+                : `No students pending ${attendanceTab === 'checkin' ? 'check-in' : 'check-out'}.`}
+            </p>
           </article>
         )}
       </div>

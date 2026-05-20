@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { forgotPasswordHandler, loginHandler, resetPasswordHandler, sendTestEmailHandler } from '../controllers/auth.controller.js';
-import { checkInHandler, checkOutHandler, termReportHandler } from '../controllers/attendance.controller.js';
+import { checkInHandler, checkOutHandler, termReportHandler,undoCheckInHandler } from '../controllers/attendance.controller.js';
 import { listStudentsHandler } from '../controllers/student.controller.js';
 import { listGroupsHandler } from '../controllers/group.controller.js';
 import { listSchoolYearsHandler } from '../controllers/schoolYear.controller.js';
@@ -75,6 +75,7 @@ router.get('/admin/events/:eventId/attendance', requireAuth, requireRole('admin'
 
 router.post('/attendance/checkin', requireAuth, requireRole('admin', 'teacher'), checkInHandler);
 router.post('/attendance/checkout', requireAuth, requireRole('admin', 'teacher'), checkOutHandler);
+router.post('/attendance/undo-checkin', requireAuth, requireRole('admin', 'teacher'), undoCheckInHandler);
 
 router.get('/reports/term', requireAuth, requireRole('admin'), termReportHandler);
 

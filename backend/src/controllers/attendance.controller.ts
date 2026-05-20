@@ -205,6 +205,31 @@ export const checkOutHandler = async (req: Request, res: Response) => {
   return res.json(updated.rows[0]);
 };
 
+export const undoCheckInHandler = async (req: Request, res: Response) => {
+  const { studentId, eventId } = req.body;
+
+  if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+
+  const enrollment = await getActiveEnrollment(studentId);
+  if (!enrollment) return res.status(400).json({ message: 'No active enrollment for this student in active academic year' });
+  const access = await canAccessEnrollment(req.user.id, req.user.role, enrollment.group_id);
+  if (!access) return res.status(403).json({ message: 'You cannot access this student' });
+
+  const event = await getEvent(eventId);
+  if (!event) return res.status(400).json({ message: 'Event not found' });
+
+  const deleted = await pool.query(
+    'DELETE FROM attendance_records WHERE enrollment_id = $1 AND event_id = $2 RETURNING *',
+    [enrollment.id, eventId]
+  );
+
+  if (!deleted.rowCount) {
+    return res.status(400).json({ message: 'No attendance record found to undo' });
+  }
+
+  return res.json({ message: 'Check-in undone successfully', record: deleted.rows[0] });
+};
+
 export const termReportHandler = async (req: Request, res: Response) => {
   const termStart = String(req.query.termStart || '');
   const termEnd = String(req.query.termEnd || '');
