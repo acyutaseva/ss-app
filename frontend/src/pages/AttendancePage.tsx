@@ -485,6 +485,28 @@ export const AttendancePage = () => {
   const handleMobileAttendanceAction = async (student: Student) => {
     if (!selectedEventId || submittingStudentId) return;
     if (attendanceTab === 'checkin') {
+      if (isCheckinOnlyEvent) {
+        setSubmittingStudentId(student.id);
+        try {
+          await checkIn(student.id);
+        } catch (err) {
+          let errorMsg = 'Attendance update failed';
+          if (err && typeof err === 'object') {
+            if ('message' in err && typeof err.message === 'string') {
+              errorMsg = err.message;
+            } else if (err instanceof Error) {
+              errorMsg = err.message;
+            }
+          }
+          setMsg(errorMsg);
+          // eslint-disable-next-line no-console
+          console.error('Check-in error:', err);
+        } finally {
+          setSubmittingStudentId(null);
+        }
+        return;
+      }
+
       openCheckinSignatureDialog(student);
       return;
     }
