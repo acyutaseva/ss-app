@@ -624,9 +624,19 @@ export const AttendancePage = () => {
                 ) : attendanceTab === 'checkout' ? (
                   <button className="btn warn" disabled={!selectedEventId} onClick={() => checkOut(student.id)}>Check Out</button>
                 ) : (
-                  <span className="eyebrow" style={{ alignSelf: 'center' }}>
-                    {isCheckinOnlyEvent ? 'Checked In' : 'Checked In & Out'}
-                  </span>
+                  <>
+                    <span className="eyebrow" style={{ alignSelf: 'center', marginRight: 8 }}>
+                      {isCheckinOnlyEvent ? 'Checked In' : 'Checked In & Out'}
+                    </span>
+                    <button
+                      className="btn danger"
+                      disabled={!selectedEventId || submittingStudentId === student.id}
+                      onClick={() => undoCheckIn(student.id)}
+                      style={{ marginLeft: 8 }}
+                    >
+                      {submittingStudentId === student.id ? 'Undoing...' : 'Undo Check-In'}
+                    </button>
+                  </>
                 )}
               </div>
             </article>
@@ -664,9 +674,17 @@ export const AttendancePage = () => {
                     {submittingStudentId === student.id ? 'Saving...' : 'Check Out'}
                   </button>
                 ) : (
-                  <span className="eyebrow" style={{ whiteSpace: 'nowrap' }}>
-                    {isCheckinOnlyEvent ? 'Checked In' : 'Done'}
-                  </span>
+                  <>
+                    <button
+                      type="button"
+                      className={`btn attendance-mobile-inline-action danger ${submittingStudentId === student.id ? 'saving' : ''}`}
+                      disabled={!selectedEventId || submittingStudentId === student.id}
+                      onClick={() => undoCheckIn(student.id)}
+                      style={{ marginLeft: 8 }}
+                    >
+                      {submittingStudentId === student.id ? 'Undoing...' : 'Undo Check-In'}
+                    </button>
+                  </>
                 )}
                 {toDialPhone(student.mobile_number) && (
                   <a
