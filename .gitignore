@@ -29,3 +29,5 @@ frontend/.env
 .history/
 .history/*
 .history/**/*
+./backend/data/**/*
+./backend/data/signatures/*

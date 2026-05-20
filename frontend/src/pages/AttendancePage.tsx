@@ -110,8 +110,15 @@ export const AttendancePage = () => {
   const [selectedEventId, setSelectedEventId] = useState('');
   const [attendanceTab, setAttendanceTab] = useState<'checkin' | 'checkout'>('checkin');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [submittingStudentId, setSubmittingStudentId] = useState<string | null>(null);
+  const [showCheckinSignatureDialog, setShowCheckinSignatureDialog] = useState(false);
+  const [pendingCheckinStudent, setPendingCheckinStudent] = useState<Student | null>(null);
+  const [checkinSignerName, setCheckinSignerName] = useState('');
   const [msg, setMsg] = useState('');
   const latestStudentsRequestId = useRef(0);
+  const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const signatureDrawingRef = useRef(false);
+  const signatureHasStrokeRef = useRef(false);
   const selectedEvent = events.find((e) => e.id === selectedEventId);
   const isCheckinOnlyEvent = selectedEvent?.attendance_mode === 'checkin_only';
 
@@ -227,9 +234,18 @@ export const AttendancePage = () => {
   const pendingCheckinCount = useMemo(() => students.filter((s) => !s.checkin_time).length, [students]);
   const pendingCheckoutCount = useMemo(() => students.filter((s) => Boolean(s.checkin_time) && !s.checkout_time).length, [students]);
 
-  const checkIn = async (studentId: string) => {
+  const checkIn = async (studentId: string, droppedBy?: string, signatureDataUrl?: string) => {
     if (!token || !selectedEventId) return;
-    await apiFetch('/attendance/checkin', { method: 'POST', body: JSON.stringify({ studentId, eventId: selectedEventId }) }, token);
+    await apiFetch('/attendance/checkin', {
+      method: 'POST',
+      body: JSON.stringify({
+        studentId,
+        eventId: selectedEventId,
+        droppedBy: droppedBy?.trim() || undefined,
+        signatureDataUrl,
+        notes: signatureDataUrl ? 'Signature captured on mobile check-in' : undefined
+      })
+    }, token);
     setMsg('Check-in saved');
     await loadStudents();
   };
@@ -254,17 +270,137 @@ export const AttendancePage = () => {
     await loadStudents();
   };
 
-  const handleMobileAttendanceAction = async (
-    e: React.SyntheticEvent<HTMLButtonElement>,
-    studentId: string
-  ) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (attendanceTab === 'checkin') {
-      await checkIn(studentId);
+  const clearSignatureCanvas = () => {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    signatureHasStrokeRef.current = false;
+  };
+
+  const getSignaturePoint = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY
+    };
+  };
+
+  const handleSignaturePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = signatureCanvasRef.current;
+    const point = getSignaturePoint(e);
+    if (!canvas || !point) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    signatureDrawingRef.current = true;
+    canvas.setPointerCapture(e.pointerId);
+    ctx.beginPath();
+    ctx.moveTo(point.x, point.y);
+  };
+
+  const handleSignaturePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!signatureDrawingRef.current) return;
+    const point = getSignaturePoint(e);
+    const canvas = signatureCanvasRef.current;
+    if (!canvas || !point) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.lineTo(point.x, point.y);
+    ctx.stroke();
+    signatureHasStrokeRef.current = true;
+  };
+
+  const handleSignaturePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+    signatureDrawingRef.current = false;
+    canvas.releasePointerCapture(e.pointerId);
+  };
+
+  const openCheckinSignatureDialog = (student: Student) => {
+    setPendingCheckinStudent(student);
+    setCheckinSignerName('');
+    setShowCheckinSignatureDialog(true);
+    setTimeout(() => {
+      const canvas = signatureCanvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#1f2b20';
+      clearSignatureCanvas();
+    }, 0);
+  };
+
+  const closeCheckinSignatureDialog = () => {
+    setShowCheckinSignatureDialog(false);
+    setPendingCheckinStudent(null);
+    setCheckinSignerName('');
+    clearSignatureCanvas();
+  };
+
+  const confirmCheckinWithSignature = async () => {
+    if (!pendingCheckinStudent || !selectedEventId) return;
+    if (!signatureHasStrokeRef.current) {
+      setMsg('Please provide a signature before check-in');
       return;
     }
-    await checkOut(studentId);
+
+    const signatureCanvas = signatureCanvasRef.current;
+    if (!signatureCanvas) {
+      setMsg('Signature canvas is unavailable. Please try again.');
+      return;
+    }
+
+    const signatureDataUrl = signatureCanvas.toDataURL('image/jpeg', 0.72);
+
+    setSubmittingStudentId(pendingCheckinStudent.id);
+    try {
+      await checkIn(pendingCheckinStudent.id, checkinSignerName, signatureDataUrl);
+      closeCheckinSignatureDialog();
+    } catch (err) {
+      // Show backend error message if available
+      let errorMsg = 'Attendance update failed';
+      if (err && typeof err === 'object') {
+        if ('message' in err && typeof err.message === 'string') {
+          errorMsg = err.message;
+        } else if (err instanceof Error) {
+          errorMsg = err.message;
+        }
+      }
+      setMsg(errorMsg);
+      // Log error for debugging
+      // eslint-disable-next-line no-console
+      console.error('Check-in error:', err);
+    } finally {
+      setSubmittingStudentId(null);
+    }
+  };
+
+  const handleMobileAttendanceAction = async (student: Student) => {
+    if (!selectedEventId || submittingStudentId) return;
+    if (attendanceTab === 'checkin') {
+      openCheckinSignatureDialog(student);
+      return;
+    }
+
+    setSubmittingStudentId(student.id);
+    try {
+      await checkOut(student.id);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : 'Attendance update failed');
+    } finally {
+      setSubmittingStudentId(null);
+    }
   };
 
   return (
@@ -356,21 +492,19 @@ export const AttendancePage = () => {
                   <button
                     type="button"
                     className="btn success attendance-mobile-inline-action"
-                    disabled={!selectedEventId}
-                    onTouchEnd={(e) => void handleMobileAttendanceAction(e, student.id)}
-                    onClick={(e) => void handleMobileAttendanceAction(e, student.id)}
+                    disabled={!selectedEventId || submittingStudentId === student.id}
+                    onClick={() => void handleMobileAttendanceAction(student)}
                   >
-                    Check In
+                    {submittingStudentId === student.id ? 'Saving...' : 'Check In'}
                   </button>
                 ) : (
                   <button
                     type="button"
                     className="btn warn attendance-mobile-inline-action"
-                    disabled={!selectedEventId}
-                    onTouchEnd={(e) => void handleMobileAttendanceAction(e, student.id)}
-                    onClick={(e) => void handleMobileAttendanceAction(e, student.id)}
+                    disabled={!selectedEventId || submittingStudentId === student.id}
+                    onClick={() => void handleMobileAttendanceAction(student)}
                   >
-                    Check Out
+                    {submittingStudentId === student.id ? 'Saving...' : 'Check Out'}
                   </button>
                 )}
                 {toDialPhone(student.mobile_number) && (
@@ -432,6 +566,50 @@ export const AttendancePage = () => {
               <div className="row" style={{ marginTop: 8 }}>
                 <button className="btn ghost" onClick={() => setSelectedStudent(null)}>Close</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCheckinSignatureDialog && pendingCheckinStudent && (
+        <div className="modal-backdrop" onClick={closeCheckinSignatureDialog}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <h2>Sign for Check In</h2>
+            <p className="eyebrow" style={{ marginTop: 4 }}>{pendingCheckinStudent.full_name}</p>
+
+            <label className="field" style={{ marginTop: 10 }}>
+              <span className="field-label">Dropped by (optional)</span>
+              <input
+                value={checkinSignerName}
+                onChange={(e) => setCheckinSignerName(e.target.value)}
+                placeholder="Parent / Guardian name"
+              />
+            </label>
+
+            <div className="attendance-signature-wrap" style={{ marginTop: 10 }}>
+              <canvas
+                ref={signatureCanvasRef}
+                className="attendance-signature-canvas"
+                width={800}
+                height={280}
+                onPointerDown={handleSignaturePointerDown}
+                onPointerMove={handleSignaturePointerMove}
+                onPointerUp={handleSignaturePointerUp}
+                onPointerLeave={handleSignaturePointerUp}
+              />
+            </div>
+
+            <div className="row wrap" style={{ marginTop: 12 }}>
+              <button className="btn ghost" onClick={clearSignatureCanvas}>Clear</button>
+              <span style={{ flex: 1 }} />
+              <button className="btn ghost" onClick={closeCheckinSignatureDialog}>Cancel</button>
+              <button
+                className="btn success"
+                disabled={submittingStudentId === pendingCheckinStudent.id}
+                onClick={() => void confirmCheckinWithSignature()}
+              >
+                {submittingStudentId === pendingCheckinStudent.id ? 'Saving...' : 'Confirm Check In'}
+              </button>
             </div>
           </div>
         </div>

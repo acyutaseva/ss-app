@@ -1,11 +1,15 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { pool } from '../db/pool.js';
 
 const checkInSchema = z.object({
   studentId: z.string().uuid(),
   eventId: z.string().uuid(),
   droppedBy: z.string().min(1).max(120).optional(),
+  signatureDataUrl: z.string().optional(),
   notes: z.string().max(500).optional()
 });
 
@@ -61,10 +65,58 @@ const isPastEventForTeacher = (event: { event_date: string; end_time: string }) 
   return false;
 };
 
+const SIGNATURE_DIR_PRIMARY = '/data/signatures';
+const SIGNATURE_DIR_FALLBACK = join(process.cwd(), 'data', 'signatures');
+const SIGNATURE_PUBLIC_BASE = '/uploads/signatures';
+
+const persistSignatureDataUrl = async (dataUrl: string, studentId: string, eventId: string) => {
+  const match = dataUrl.match(/^data:image\/(png|jpeg|jpg);base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) {
+    throw new Error('Invalid signature image format');
+  }
+
+  const mime = match[1];
+  const base64Payload = match[2];
+  const ext = mime === 'png' ? 'png' : 'jpg';
+  const buffer = Buffer.from(base64Payload, 'base64');
+
+  if (!buffer.length) {
+    throw new Error('Empty signature image');
+  }
+
+  // Allow moderate signature payloads across devices.
+  if (buffer.length > 5 * 1024 * 1024) {
+    throw new Error('Signature image is too large');
+  }
+
+  const fileName = `${eventId}_${studentId}_${Date.now()}_${randomUUID()}.${ext}`;
+  const primaryPath = join(SIGNATURE_DIR_PRIMARY, fileName);
+
+  try {
+    await mkdir(SIGNATURE_DIR_PRIMARY, { recursive: true });
+    await writeFile(primaryPath, buffer);
+  } catch {
+    await mkdir(SIGNATURE_DIR_FALLBACK, { recursive: true });
+    const fallbackPath = join(SIGNATURE_DIR_FALLBACK, fileName);
+    await writeFile(fallbackPath, buffer);
+  }
+
+  return `${SIGNATURE_PUBLIC_BASE}/${fileName}`;
+};
+
 export const checkInHandler = async (req: Request, res: Response) => {
   const parsed = checkInSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ message: 'Invalid input' });
   if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+
+  let signatureUrl: string | null = null;
+  if (parsed.data.signatureDataUrl) {
+    try {
+      signatureUrl = await persistSignatureDataUrl(parsed.data.signatureDataUrl, parsed.data.studentId, parsed.data.eventId);
+    } catch (error) {
+      return res.status(400).json({ message: error instanceof Error ? error.message : 'Invalid signature' });
+    }
+  }
 
   const enrollment = await getActiveEnrollment(parsed.data.studentId);
   if (!enrollment) return res.status(400).json({ message: 'No active enrollment for this student in active academic year' });
@@ -79,15 +131,23 @@ export const checkInHandler = async (req: Request, res: Response) => {
 
   const insert = await pool.query(
     `INSERT INTO attendance_records
-      (enrollment_id, event_id, checkin_time, dropped_by, notes, volunteer_id)
-     VALUES ($1, $2, NOW(), $3, $4, $5)
+      (enrollment_id, event_id, checkin_time, dropped_by, signature_url, notes, volunteer_id)
+     VALUES ($1, $2, NOW(), $3, $4, $5, $6)
      ON CONFLICT (enrollment_id, event_id) DO UPDATE
       SET checkin_time = EXCLUDED.checkin_time,
           dropped_by = EXCLUDED.dropped_by,
+          signature_url = COALESCE(EXCLUDED.signature_url, attendance_records.signature_url),
           notes = COALESCE(EXCLUDED.notes, attendance_records.notes),
           volunteer_id = EXCLUDED.volunteer_id
      RETURNING *`,
-    [enrollment.id, parsed.data.eventId, parsed.data.droppedBy || null, parsed.data.notes || null, req.user?.id || null]
+    [
+      enrollment.id,
+      parsed.data.eventId,
+      parsed.data.droppedBy || null,
+      signatureUrl,
+      parsed.data.notes || null,
+      req.user?.id || null
+    ]
   );
 
   return res.json(insert.rows[0]);
