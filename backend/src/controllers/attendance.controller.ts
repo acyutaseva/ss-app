@@ -20,6 +20,7 @@ const checkOutSchema = z.object({
   pickedByName: z.string().min(1).max(120),
   pickedByPhone: z.string().max(30).optional(),
   signatureUrl: z.string().url().optional(),
+  signatureDataUrl: z.string().optional(),
   notes: z.string().max(500).optional()
 });
 
@@ -158,6 +159,15 @@ export const checkOutHandler = async (req: Request, res: Response) => {
   if (!parsed.success) return res.status(400).json({ message: 'Invalid input' });
   if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
 
+  let signatureUrl: string | null = parsed.data.signatureUrl || null;
+  if (parsed.data.signatureDataUrl) {
+    try {
+      signatureUrl = await persistSignatureDataUrl(parsed.data.signatureDataUrl, parsed.data.studentId, parsed.data.eventId);
+    } catch (error) {
+      return res.status(400).json({ message: error instanceof Error ? error.message : 'Invalid signature' });
+    }
+  }
+
   const enrollment = await getActiveEnrollment(parsed.data.studentId);
   if (!enrollment) return res.status(400).json({ message: 'No active enrollment for this student in active academic year' });
   const access = await canAccessEnrollment(req.user.id, req.user.role, enrollment.group_id);
@@ -195,7 +205,7 @@ export const checkOutHandler = async (req: Request, res: Response) => {
       parsed.data.pickedByType,
       parsed.data.pickedByName,
       parsed.data.pickedByPhone || null,
-      parsed.data.signatureUrl || null,
+      signatureUrl,
       parsed.data.notes || null,
       enrollment.id,
       parsed.data.eventId
