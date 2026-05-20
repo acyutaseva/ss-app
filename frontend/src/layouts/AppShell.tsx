@@ -19,8 +19,8 @@ export const AppShell = () => {
     <div className="page-shell">
       <header className="app-header">
         <div>
-          <p className="eyebrow">Hare Krishan Sunday School</p>
-          <h2>Student Management</h2>
+          <p className="eyebrow">ISKCON Perth</p>
+          <h2>Hare Krishan Sunday School</h2>
         </div>
         <div className="app-header-actions">
           <p className="eyebrow">Role: {user?.role === 'admin' ? 'Admin' : 'Teacher'}</p>
