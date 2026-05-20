@@ -36,17 +36,7 @@ const getActiveEnrollment = async (studentId: string) => {
   return result.rows[0] || null;
 };
 
-const canAccessEnrollment = async (userId: string, role: string, groupId: string) => {
-  if (role === 'admin') return true;
-  const result = await pool.query(
-    `SELECT 1
-     FROM teacher_groups tg
-     WHERE tg.group_id = $1 AND tg.teacher_id = $2
-     LIMIT 1`,
-    [groupId, userId]
-  );
-  return Boolean(result.rowCount);
-};
+const canAccessEnrollment = async (_userId: string, role: string, _groupId: string) => role === 'admin' || role === 'teacher';
 
 const getEvent = async (eventId: string) => {
   const result = await pool.query(

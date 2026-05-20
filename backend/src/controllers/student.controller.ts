@@ -46,14 +46,6 @@ export const listStudentsHandler = async (req: Request, res: Response) => {
     )`);
   }
 
-  if (req.user?.role === 'teacher') {
-    values.push(req.user.id);
-    where.push(`(
-      NOT EXISTS (SELECT 1 FROM teacher_groups WHERE teacher_id = $${values.length})
-      OR se.group_id IN (SELECT group_id FROM teacher_groups WHERE teacher_id = $${values.length})
-    )`);
-  }
-
   if (academicYear) {
     values.push(academicYear);
     where.push(`ay.year_label = $${values.length}`);

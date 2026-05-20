@@ -250,7 +250,11 @@ export const AttendancePage = () => {
       })
     }, token);
     setMsg('Check-in saved');
-    await loadStudents();
+    try {
+      await loadStudents();
+    } catch {
+      setMsg('Check-in saved. Student list refresh failed; it will auto-refresh shortly.');
+    }
   };
 
   const checkOut = async (studentId: string, pickedByName?: string, signatureDataUrl?: string) => {
@@ -272,7 +276,11 @@ export const AttendancePage = () => {
       token
     );
     setMsg('Check-out saved');
-    await loadStudents();
+    try {
+      await loadStudents();
+    } catch {
+      setMsg('Check-out saved. Student list refresh failed; it will auto-refresh shortly.');
+    }
   };
 
   const clearSignatureCanvas = () => {
@@ -326,7 +334,9 @@ export const AttendancePage = () => {
     const canvas = signatureCanvasRef.current;
     if (!canvas) return;
     signatureDrawingRef.current = false;
-    canvas.releasePointerCapture(e.pointerId);
+    if (canvas.hasPointerCapture(e.pointerId)) {
+      canvas.releasePointerCapture(e.pointerId);
+    }
   };
 
   const openCheckinSignatureDialog = (student: Student) => {
@@ -397,11 +407,13 @@ export const AttendancePage = () => {
     }
 
     const signatureDataUrl = signatureCanvas.toDataURL('image/jpeg', 0.72);
+    const studentId = pendingCheckinStudent.id;
+    const droppedBy = checkinSignerName;
 
-    setSubmittingStudentId(pendingCheckinStudent.id);
+    closeCheckinSignatureDialog();
+    setSubmittingStudentId(studentId);
     try {
-      await checkIn(pendingCheckinStudent.id, checkinSignerName, signatureDataUrl);
-      closeCheckinSignatureDialog();
+      await checkIn(studentId, droppedBy, signatureDataUrl);
     } catch (err) {
       // Show backend error message if available
       let errorMsg = 'Attendance update failed';
@@ -435,11 +447,13 @@ export const AttendancePage = () => {
     }
 
     const signatureDataUrl = signatureCanvas.toDataURL('image/jpeg', 0.72);
+    const studentId = pendingCheckoutStudent.id;
+    const pickedByName = checkoutSignerName;
 
-    setSubmittingStudentId(pendingCheckoutStudent.id);
+    closeCheckoutSignatureDialog();
+    setSubmittingStudentId(studentId);
     try {
-      await checkOut(pendingCheckoutStudent.id, checkoutSignerName, signatureDataUrl);
-      closeCheckoutSignatureDialog();
+      await checkOut(studentId, pickedByName, signatureDataUrl);
     } catch (err) {
       let errorMsg = 'Attendance update failed';
       if (err && typeof err === 'object') {
