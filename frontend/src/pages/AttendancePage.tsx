@@ -237,6 +237,23 @@ export const AttendancePage = () => {
   const pendingCheckinCount = useMemo(() => students.filter((s) => !s.checkin_time).length, [students]);
   const pendingCheckoutCount = useMemo(() => students.filter((s) => Boolean(s.checkin_time) && !s.checkout_time).length, [students]);
 
+  const markStudentAttendanceLocally = (studentId: string, action: 'checkin' | 'checkout') => {
+    const nowIso = new Date().toISOString();
+    setStudents((prev) => prev.map((student) => {
+      if (student.id !== studentId) return student;
+
+      if (action === 'checkin') {
+        return { ...student, checkin_time: student.checkin_time || nowIso };
+      }
+
+      return {
+        ...student,
+        checkin_time: student.checkin_time || nowIso,
+        checkout_time: student.checkout_time || nowIso
+      };
+    }));
+  };
+
   const checkIn = async (studentId: string, droppedBy?: string, signatureDataUrl?: string) => {
     if (!token || !selectedEventId) return;
     await apiFetch('/attendance/checkin', {
@@ -249,12 +266,9 @@ export const AttendancePage = () => {
         notes: signatureDataUrl ? 'Signature captured on mobile check-in' : undefined
       })
     }, token);
+    markStudentAttendanceLocally(studentId, 'checkin');
     setMsg('Check-in saved');
-    try {
-      await loadStudents();
-    } catch {
-      setMsg('Check-in saved. Student list refresh failed; it will auto-refresh shortly.');
-    }
+    void loadStudents().catch(() => setMsg('Check-in saved. Student list refresh failed; it will auto-refresh shortly.'));
   };
 
   const checkOut = async (studentId: string, pickedByName?: string, signatureDataUrl?: string) => {
@@ -275,12 +289,9 @@ export const AttendancePage = () => {
       },
       token
     );
+    markStudentAttendanceLocally(studentId, 'checkout');
     setMsg('Check-out saved');
-    try {
-      await loadStudents();
-    } catch {
-      setMsg('Check-out saved. Student list refresh failed; it will auto-refresh shortly.');
-    }
+    void loadStudents().catch(() => setMsg('Check-out saved. Student list refresh failed; it will auto-refresh shortly.'));
   };
 
   const clearSignatureCanvas = () => {
@@ -569,7 +580,7 @@ export const AttendancePage = () => {
                 {attendanceTab === 'checkin' ? (
                   <button
                     type="button"
-                    className="btn success attendance-mobile-inline-action"
+                    className={`btn attendance-mobile-inline-action ${submittingStudentId === student.id ? 'saving' : 'success'}`}
                     disabled={!selectedEventId || submittingStudentId === student.id}
                     onClick={() => void handleMobileAttendanceAction(student)}
                   >
@@ -578,7 +589,7 @@ export const AttendancePage = () => {
                 ) : (
                   <button
                     type="button"
-                    className="btn warn attendance-mobile-inline-action"
+                    className={`btn attendance-mobile-inline-action ${submittingStudentId === student.id ? 'saving' : 'warn'}`}
                     disabled={!selectedEventId || submittingStudentId === student.id}
                     onClick={() => void handleMobileAttendanceAction(student)}
                   >
@@ -682,7 +693,7 @@ export const AttendancePage = () => {
               <span style={{ flex: 1 }} />
               <button className="btn ghost" onClick={closeCheckinSignatureDialog}>Cancel</button>
               <button
-                className="btn success"
+                className={`btn ${submittingStudentId === pendingCheckinStudent.id ? 'saving' : 'success'}`}
                 disabled={submittingStudentId === pendingCheckinStudent.id}
                 onClick={() => void confirmCheckinWithSignature()}
               >
@@ -726,7 +737,7 @@ export const AttendancePage = () => {
               <span style={{ flex: 1 }} />
               <button className="btn ghost" onClick={closeCheckoutSignatureDialog}>Cancel</button>
               <button
-                className="btn warn"
+                className={`btn ${submittingStudentId === pendingCheckoutStudent.id ? 'saving' : 'warn'}`}
                 disabled={submittingStudentId === pendingCheckoutStudent.id}
                 onClick={() => void confirmCheckoutWithSignature()}
               >
