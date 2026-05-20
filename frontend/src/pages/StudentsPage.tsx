@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+// Utility to show 'First L.' or just 'First' for names
+const toShortName = (fullName: string) => {
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0];
+  if (parts.length > 1) return `${parts[0]} ${parts[1][0]}.`;
+  return fullName;
+};
 import { apiFetch } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { getStudentAvatarUrl } from '../utils/studentAvatar';
@@ -87,6 +94,16 @@ const toWhatsAppPhone = (value?: string | null) => {
   return digits;
 };
 
+const toShortSchoolYear = (value?: string | null) => {
+  if (!value) return '';
+  const normalized = value.trim().toLowerCase().replace(/[-\s]+/g, ' ');
+  if (normalized === 'kindy') return 'K';
+  if (normalized === 'pre primary') return 'PP';
+  const yearMatch = normalized.match(/^year\s*(\d+)$/);
+  if (yearMatch) return `Y${yearMatch[1]}`;
+  return value;
+};
+
 const toEditStudent = (r: StudentRow): EditStudentState => ({
   id: r.id,
   enrollmentId: r.enrollment_id,
@@ -115,9 +132,14 @@ export const StudentsPage = () => {
   const [rows, setRows] = useState<StudentRow[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [mobilePage, setMobilePage] = useState(1);
+  const [mobileHasMore, setMobileHasMore] = useState(true);
+  const mobileListRef = useRef<HTMLDivElement | null>(null);
+  const mobileLoadingRef = useRef<HTMLDivElement | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [years, setYears] = useState<AcademicYear[]>([]);
   const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [groupId, setGroupId] = useState('');
   const [academicYear, setAcademicYear] = useState('');
@@ -145,6 +167,7 @@ export const StudentsPage = () => {
   const [confirmAction, setConfirmAction] = useState<null | 'save' | 'archive' | 'delete'>(null);
   const [togglingEnrollmentId, setTogglingEnrollmentId] = useState<string | null>(null);
   const [viewStudent, setViewStudent] = useState<StudentRow | null>(null);
+  const latestRowsRequestId = useRef(0);
 
   const resolveGroupIdFromSchoolYearId = (schoolYearId: string) => {
     const selectedSchoolYear = schoolYears.find((y) => y.id === schoolYearId);
@@ -162,6 +185,14 @@ export const StudentsPage = () => {
     const match = groups.find((g) => g.name.includes(logicalGroup));
     return match?.name || '-';
   };
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setSearch(searchInput.trim());
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [searchInput]);
 
   const loadLookups = async () => {
     if (!token) return;
@@ -188,6 +219,7 @@ export const StudentsPage = () => {
 
   const loadRows = async () => {
     if (!token) return;
+    const requestId = ++latestRowsRequestId.current;
     const params = new URLSearchParams();
     if (search.trim()) params.set('search', search.trim());
     if (groupId) params.set('groupId', groupId);
@@ -195,19 +227,63 @@ export const StudentsPage = () => {
     params.set('page', String(page));
     params.set('pageSize', String(pageSize));
     const data = await apiFetch<StudentsApiResponse>(`/students?${params.toString()}`, {}, token);
+    if (requestId !== latestRowsRequestId.current) return;
     setRows(data.items);
     setTotal(data.total);
     setTotalPages(data.totalPages);
   };
 
+  // Infinite scroll for mobile
+  const loadMoreMobileRows = useCallback(async () => {
+    if (!token || !mobileHasMore) return;
+    const params = new URLSearchParams();
+    if (search.trim()) params.set('search', search.trim());
+    if (groupId) params.set('groupId', groupId);
+    if (academicYear) params.set('academicYear', academicYear);
+    params.set('page', String(mobilePage));
+    params.set('pageSize', String(pageSize));
+    const data = await apiFetch<StudentsApiResponse>(`/students?${params.toString()}`, {}, token);
+    setRows((prev) => mobilePage === 1 ? data.items : [...prev, ...data.items]);
+    setTotal(data.total);
+    setTotalPages(data.totalPages);
+    setMobileHasMore(mobilePage < data.totalPages);
+  }, [token, search, groupId, academicYear, mobilePage, pageSize, mobileHasMore]);
+
   useEffect(() => {
     loadLookups().catch(() => setError('Failed to load filters'));
   }, [token]);
 
+  // Desktop/tablet paginated
   useEffect(() => {
     if (!token) return;
     loadRows().catch(() => setError('Failed to load students'));
   }, [token, academicYear, groupId, page, pageSize, search]);
+
+
+  // Mobile infinite scroll: reset page, hasMore, and rows when filters/search/token change
+  useEffect(() => {
+    setRows([]);
+    setMobilePage(1);
+    setMobileHasMore(true);
+  }, [search, groupId, academicYear, token]);
+
+  useEffect(() => {
+    loadMoreMobileRows();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mobilePage, search, groupId, academicYear, token]);
+
+  // Intersection observer for infinite scroll
+  useEffect(() => {
+    const el = mobileLoadingRef.current;
+    if (!el) return;
+    const observer = new window.IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && mobileHasMore) {
+        setMobilePage((p) => p + 1);
+      }
+    }, { root: null, rootMargin: '0px', threshold: 1.0 });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [mobileHasMore]);
 
   const stats = useMemo(() => {
     const totalRows = rows.length;
@@ -368,163 +444,156 @@ export const StudentsPage = () => {
     <section className="content">
       <div className="card">
         <div className="row wrap" style={{ justifyContent: 'space-between' }}>
-          <h2>All Students</h2>
+          <h2>Students</h2>
           {isAdmin && <button className="btn primary" onClick={() => { setAddStudentError(''); setShowAddStudent(true); }}>Add Student</button>}
         </div>
-        <div className="row wrap">
-          <div className="desktop-filter-pair">
-            <input
-              placeholder="Search student"
-              value={search}
-              onChange={(e) => {
-                setPage(1);
-                setSearch(e.target.value);
-              }}
-            />
-            <select
-              className="filter-group"
-              value={groupId}
-              onChange={(e) => {
-                setPage(1);
-                setGroupId(e.target.value);
-              }}
-            >
-              <option value="">All groups</option>
-              {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-            </select>
-            <select
-              value={academicYear}
-              onChange={(e) => {
-                setPage(1);
-                setAcademicYear(e.target.value);
-              }}
-            >
-              <option value="">Active year</option>
-              {years.map((y) => <option key={y.id} value={y.year_label}>{y.year_label}{y.is_active ? ' (Active)' : ''}</option>)}
-            </select>
-          </div>
-        </div>
-        <div className="row wrap">
-          <p className="eyebrow">All matching: {total} • Current page paid: {stats.paid} • unpaid: {stats.unpaid}</p>
-        </div>
-        {error && <p className="error">{error}</p>}
-      </div>
 
-      <div className="card table-wrap">
-        <table className="desktop-only">
-          <thead>
-            <tr>
-              <th>Student</th>
-              <th>Gender</th>
-              <th>Group</th>
-              <th>School Year</th>
-              <th>Payment</th>
-              <th>Contact</th>
-              {isAdmin && <th>Actions</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr
-                key={r.enrollment_id}
-                className={r.is_paid ? 'student-row paid-row' : 'student-row unpaid-row'}
-                onClick={() => setViewStudent(r)}
-                style={{ cursor: 'pointer' }}
-              >
-                <td>
-                  <div className="student-name-cell">
-                    <img className="student-avatar" src={getStudentAvatarUrl(r.id, r.gender)} alt="Student avatar" loading="lazy" />
-                    <span>{r.full_name}</span>
-                  </div>
-                </td>
-                <td>{r.gender ? (r.gender === 'boy' ? 'Boy' : 'Girl') : '-'}</td>
-                <td>{r.group_name}</td>
-                <td>{r.school_year_name}</td>
-                <td onClick={(e) => e.stopPropagation()}>
-                  {isAdmin ? (
-                    <button
-                      className={r.is_paid ? 'payment-toggle payment-badge paid' : 'payment-toggle payment-badge unpaid'}
-                      onClick={() => togglePaymentFromTable(r)}
-                      disabled={togglingEnrollmentId === r.enrollment_id}
-                      title={r.is_paid ? 'Click to mark as unpaid' : 'Click to mark as paid'}
-                    >
-                      {r.is_paid ? 'Paid' : '! Unpaid'}
-                    </button>
-                  ) : (
-                    <span className={r.is_paid ? 'payment-badge paid' : 'payment-badge unpaid'}>
-                      {r.is_paid ? 'Paid' : '! Unpaid'}
-                    </span>
-                  )}
-                  <p className="eyebrow">AUD {Number(r.payment_amount ?? 125).toFixed(2)}</p>
-                </td>
-                <td onClick={(e) => e.stopPropagation()}>
-                  <div className="row wrap">
-                    {toDialPhone(r.mobile_number) && (
-                      <a className="btn ghost contact-btn" href={`tel:${toDialPhone(r.mobile_number)}`}>Call</a>
-                    )}
-                    {toWhatsAppPhone(r.mobile_number) && (
-                      <a className="btn ghost contact-btn" href={`https://wa.me/${toWhatsAppPhone(r.mobile_number)}`} target="_blank" rel="noreferrer">WhatsApp</a>
-                    )}
-                  </div>
-                </td>
-                {isAdmin && (
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <div className="row wrap">
-                      <button className="btn ghost contact-btn edit-btn" onClick={() => { setEditStudent(toEditStudent(r)); setEditTab('profile'); }}>Edit</button>
+        {/* Filter Bar */}
+        <div className="row wrap filter-bar" style={{ gap: 8, margin: '12px 0', flexWrap: 'wrap' }}>
+          <input
+            className="input"
+            type="text"
+            placeholder="Search by name, parent, or mobile"
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
+            style={{ minWidth: 180, flex: 1 }}
+          />
+          <select
+            className="input"
+            value={groupId}
+            onChange={e => setGroupId(e.target.value)}
+            style={{ minWidth: 120 }}
+          >
+            <option value="">All Groups</option>
+            {groups.map(g => (
+              <option key={g.id} value={g.id}>{g.name}</option>
+            ))}
+          </select>
+          {isAdmin && (
+            <select
+              className="input"
+              value={academicYear}
+              onChange={e => setAcademicYear(e.target.value)}
+              style={{ minWidth: 120 }}
+            >
+              <option value="">All Academic Years</option>
+              {years.map(y => (
+                <option key={y.year_label} value={y.year_label}>{y.year_label}{y.is_active ? ' (Active)' : ''}</option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        <div className="row wrap">
+          {/* Desktop Table */}
+          <table className="desktop-only">
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Gender</th>
+                <th>Group</th>
+                <th>School Year</th>
+                <th>Contact</th>
+                {isAdmin && <th>Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr
+                  key={r.enrollment_id}
+                  className={r.is_paid ? 'student-row paid-row' : 'student-row unpaid-row'}
+                  onClick={() => setViewStudent(r)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <td>
+                    <div className="student-name-cell">
+                      <img className="student-avatar" src={getStudentAvatarUrl(r.id, r.gender)} alt="Student avatar" loading="lazy" />
+                      <span>{r.full_name}</span>
                     </div>
                   </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        <div className="mobile-only grid-list">
-          {rows.map((r) => (
-            <article
-              className={`card student ${r.is_paid ? 'paid-row' : 'unpaid-row'}`}
-              key={`${r.enrollment_id}-mobile`}
-              onClick={() => setViewStudent(r)}
-              style={{ cursor: 'pointer' }}
-            >
-              <div>
-                <h3 className="student-name-cell"><img className="student-avatar student-avatar-sm" src={getStudentAvatarUrl(r.id, r.gender)} alt="Student avatar" loading="lazy" />{r.full_name}</h3>
-                <p>{r.gender ? (r.gender === 'boy' ? 'Boy' : 'Girl') : '-'}</p>
-                <p>{r.group_name}</p>
-                <p>{r.school_year_name}</p>
-              </div>
-              <div className="row wrap" onClick={(e) => e.stopPropagation()}>
-                <p>
-                  {isAdmin ? (
-                    <button
-                      className={r.is_paid ? 'payment-toggle payment-badge paid' : 'payment-toggle payment-badge unpaid'}
-                      onClick={() => togglePaymentFromTable(r)}
-                      disabled={togglingEnrollmentId === r.enrollment_id}
-                      title={r.is_paid ? 'Click to mark as unpaid' : 'Click to mark as paid'}
-                    >
-                      {r.is_paid ? 'Paid' : '! Unpaid'}
-                    </button>
-                  ) : (
-                    <span className={r.is_paid ? 'payment-badge paid' : 'payment-badge unpaid'}>
-                      {r.is_paid ? 'Paid' : '! Unpaid'}
-                    </span>
+                  <td>{r.gender ? (r.gender === 'boy' ? 'Boy' : 'Girl') : '-'}</td>
+                  <td>{r.group_name}</td>
+                  <td>{r.school_year_name}</td>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <div className="row wrap">
+                      {toDialPhone(r.mobile_number) && (
+                        <a className="btn ghost contact-btn" href={`tel:${toDialPhone(r.mobile_number)}`} title="Call" style={{ padding: 4, display: 'inline-flex', alignItems: 'center' }}>
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style={{ color: '#0f766e', display: 'block', marginRight: 4 }} xmlns="http://www.w3.org/2000/svg">
+                            <path d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.01-.24c1.11.37 2.29.56 3.58.56a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C9.85 21 1 12.15 1 2a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.29.19 2.47.56 3.58a1 1 0 0 1-.24 1.01l-2.2 2.2Z"/>
+                          </svg>
+                          <span className="desktop-contact-text">Call</span>
+                        </a>
+                      )}
+                      {toWhatsAppPhone(r.mobile_number) && (
+                        <a className="btn ghost contact-btn" href={`https://wa.me/${toWhatsAppPhone(r.mobile_number)}`} target="_blank" rel="noreferrer" title="WhatsApp" style={{ padding: 4, display: 'inline-flex', alignItems: 'center', marginLeft: 2 }}>
+                          <svg width="24" height="24" viewBox="0 0 20 20" fill="currentColor" style={{ color: '#25D366', display: 'block', marginRight: 4 }} xmlns="http://www.w3.org/2000/svg">
+                            <path d="M16.472 13.766c-.297-.149-1.758-.867-2.03-.967-.273-.099-.472-.148-.67.15-.198.297-.767.967-.94 1.166-.173.198-.347.223-.644.075-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.457.13-.605.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.372-.025-.521-.075-.149-.669-1.612-.916-2.207-.242-.58-.487-.501-.67-.51-.173-.007-.372-.009-.57-.009-.198 0-.52.075-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.099 3.205 5.086 4.369.712.307 1.267.489 1.701.625.715.228 1.366.196 1.88.119.574-.085 1.758-.719 2.007-1.413.248-.694.248-1.288.173-1.413-.074-.124-.272-.198-.57-.347z" fill="currentColor"/>
+                            <path d="M10 18.333c-4.6 0-8.333-3.733-8.333-8.333 0-4.6 3.733-8.333 8.333-8.333 4.6 0 8.333 3.733 8.333 8.333 0 4.6-3.733 8.333-8.333 8.333zm0-15c-3.683 0-6.667 2.984-6.667 6.667 0 1.18.31 2.29.85 3.25l-1.13 4.13 4.24-1.12c.93.51 1.98.8 3.07.8 3.683 0 6.667-2.984 6.667-6.667 0-3.683-2.984-6.667-6.667-6.667z" fill="currentColor"/>
+                          </svg>
+                          <span className="desktop-contact-text">WhatsApp</span>
+                        </a>
+                      )}
+                    </div>
+                  </td>
+                  {isAdmin && (
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <div className="row wrap">
+                        <button className="btn ghost contact-btn edit-btn" onClick={() => { setEditStudent(toEditStudent(r)); setEditTab('profile'); }}>Edit</button>
+                      </div>
+                    </td>
                   )}
-                </p>
-                <p className="eyebrow">AUD {Number(r.payment_amount ?? 125).toFixed(2)}</p>
-                {toDialPhone(r.mobile_number) && (
-                  <a className="btn ghost contact-btn" href={`tel:${toDialPhone(r.mobile_number)}`}>Call</a>
-                )}
-                {toWhatsAppPhone(r.mobile_number) && (
-                  <a className="btn ghost contact-btn" href={`https://wa.me/${toWhatsAppPhone(r.mobile_number)}`} target="_blank" rel="noreferrer">WhatsApp</a>
-                )}
-                {isAdmin && (
-                  <>
-                    <button className="btn ghost contact-btn edit-btn" onClick={() => { setEditStudent(toEditStudent(r)); setEditTab('profile'); }}>Edit</button>
-                  </>
-                )}
-              </div>
-            </article>
-          ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Mobile Card List */}
+          <div className="mobile-only grid-list students-mobile-list" ref={mobileListRef}>
+            {rows.map((r) => {
+              const groupFirstWord = r.group_name ? r.group_name.split(' ')[0] : '';
+              return (
+                <article
+                  className={`card student ${r.is_paid ? 'paid-row' : 'unpaid-row'}`}
+                  key={`${r.enrollment_id}-mobile`}
+                  onClick={() => setViewStudent(r)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div className="student-card-header-mobile" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', width: '100%' }}>
+                      <img className="student-avatar student-avatar-sm" src={getStudentAvatarUrl(r.id, r.gender)} alt="Student avatar" loading="lazy" />
+                      <span style={{ fontWeight: 700 }}>{toShortName(r.full_name)}</span>
+                      <span style={{ color: '#5f665f', fontSize: 13, marginLeft: 6 }}>{groupFirstWord}</span>
+                      <span style={{ color: '#5f665f', fontSize: 13 }}>{toShortSchoolYear(r.school_year_name)}</span>
+                      <span style={{ flex: 1 }} />
+                      {toDialPhone(r.mobile_number) && (
+                        <a className="mobile-contact-icon" href={`tel:${toDialPhone(r.mobile_number)}`} title="Call" style={{ marginLeft: 2, display: 'inline-flex', alignItems: 'center', height: 20, width: 20, background: 'none', border: 'none', boxShadow: 'none', padding: 0 }}>
+                          <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" style={{ color: '#0f766e', display: 'block' }} xmlns="http://www.w3.org/2000/svg">
+                            <path d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.01-.24c1.11.37 2.29.56 3.58.56a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C9.85 21 1 12.15 1 2a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.29.19 2.47.56 3.58a1 1 0 0 1-.24 1.01l-2.2 2.2Z"/>
+                          </svg>
+                        </a>
+                      )}
+                      {toWhatsAppPhone(r.mobile_number) && (
+                        <a className="mobile-contact-icon" href={`https://wa.me/${toWhatsAppPhone(r.mobile_number)}`} target="_blank" rel="noreferrer" title="WhatsApp" style={{ marginLeft: 2, display: 'inline-flex', alignItems: 'center', height: 20, width: 20, background: 'none', border: 'none', boxShadow: 'none', padding: 0 }}>
+                          <svg width="19" height="19" viewBox="0 0 20 20" fill="currentColor" style={{ color: '#25D366', display: 'block' }} xmlns="http://www.w3.org/2000/svg">
+                            <path d="M16.472 13.766c-.297-.149-1.758-.867-2.03-.967-.273-.099-.472-.148-.67.15-.198.297-.767.967-.94 1.166-.173.198-.347.223-.644.075-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.457.13-.605.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.372-.025-.521-.075-.149-.669-1.612-.916-2.207-.242-.58-.487-.501-.67-.51-.173-.007-.372-.009-.57-.009-.198 0-.52.075-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.099 3.205 5.086 4.369.712.307 1.267.489 1.701.625.715.228 1.366.196 1.88.119.574-.085 1.758-.719 2.007-1.413.248-.694.248-1.288.173-1.413-.074-.124-.272-.198-.57-.347z" fill="currentColor"/>
+                            <path d="M10 18.333c-4.6 0-8.333-3.733-8.333-8.333 0-4.6 3.733-8.333 8.333-8.333 4.6 0 8.333 3.733 8.333 8.333 0 4.6-3.733 8.333-8.333 8.333zm0-15c-3.683 0-6.667 2.984-6.667 6.667 0 1.18.31 2.29.85 3.25l-1.13 4.13 4.24-1.12c.93.51 1.98.8 3.07.8 3.683 0 6.667-2.984 6.667-6.667 0-3.683-2.984-6.667-6.667-6.667z" fill="currentColor"/>
+                          </svg>
+                        </a>
+                      )}
+                    </div>
+                    {isAdmin && (
+                      <div style={{ marginTop: 2 }}>
+                        <button className="btn ghost contact-btn edit-btn" onClick={() => { setEditStudent(toEditStudent(r)); setEditTab('profile'); }}>Edit</button>
+                      </div>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+            <div ref={mobileLoadingRef} style={{ height: 32, display: mobileHasMore ? 'block' : 'none', textAlign: 'center', color: '#888', fontSize: 14 }}>
+              {mobileHasMore ? 'Loading more...' : ''}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -592,7 +661,7 @@ export const StudentsPage = () => {
         </div>
       )}
 
-      <div className="card">
+      <div className="card desktop-only">
         <div className="row pagination-row">
           <button className="btn ghost" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Previous</button>
           <p>Page {page} of {totalPages}</p>

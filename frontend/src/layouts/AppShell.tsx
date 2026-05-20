@@ -1,5 +1,14 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import {
+  DashboardIcon,
+  AttendanceIcon,
+  StudentsIcon,
+  VolunteersIcon,
+  EventsIcon,
+  ReportsIcon,
+  AuditLogsIcon,
+} from '../components/SidebarIcons';
 
 export const AppShell = () => {
   const { user, logout } = useAuth();
@@ -22,14 +31,40 @@ export const AppShell = () => {
       <div className="app-shell">
         <aside className="sidebar">
           <nav className="sidebar-nav">
-            <NavLink to="/" end className={navClass}>Dashboard</NavLink>
-            <NavLink to="/students" className={navClass}>Students</NavLink>
-            {user?.role === 'admin' && <NavLink to="/volunteers" className={navClass}>Volunteers</NavLink>}
-            <NavLink to="/events" className={navClass}>Events</NavLink>
-            <NavLink to="/attendance" className={navClass}>Attendance</NavLink>
-            {/* Admin link removed */}
-            {user?.role === 'admin' && <NavLink to="/reports" className={navClass}>Reports</NavLink>}
-            {user?.role === 'admin' && <NavLink to="/audit-logs" className={navClass}>Audit Logs</NavLink>}
+            <NavLink to="/" end className={navClass}>
+              <DashboardIcon className="sidebar-nav-icon" />
+              <span className="sidebar-nav-label">Dashboard</span>
+            </NavLink>
+            <NavLink to="/attendance" className={navClass}>
+              <AttendanceIcon className="sidebar-nav-icon" />
+              <span className="sidebar-nav-label">Attendance</span>
+            </NavLink>
+            <NavLink to="/students" className={navClass}>
+              <StudentsIcon className="sidebar-nav-icon" />
+              <span className="sidebar-nav-label">Students</span>
+            </NavLink>
+            {user?.role === 'admin' && (
+              <NavLink to="/volunteers" className={navClass}>
+                <VolunteersIcon className="sidebar-nav-icon" />
+                <span className="sidebar-nav-label">Volunteers</span>
+              </NavLink>
+            )}
+            <NavLink to="/events" className={navClass}>
+              <EventsIcon className="sidebar-nav-icon" />
+              <span className="sidebar-nav-label">Events</span>
+            </NavLink>
+            {user?.role === 'admin' && (
+              <NavLink to="/reports" className={navClass}>
+                <ReportsIcon className="sidebar-nav-icon" />
+                <span className="sidebar-nav-label">Reports</span>
+              </NavLink>
+            )}
+            {user?.role === 'admin' && (
+              <NavLink to="/audit-logs" className={navClass}>
+                <AuditLogsIcon className="sidebar-nav-icon" />
+                <span className="sidebar-nav-label">Audit Logs</span>
+              </NavLink>
+            )}
           </nav>
 
         </aside>

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 
 type AuditLogRow = {
   id: string;
+  actor_id?: string | null;
   actor_name?: string | null;
   actor_role?: string | null;
   method: string;
@@ -26,6 +27,11 @@ const toDisplayDateTime = (value: string) => {
   const dt = new Date(value);
   if (Number.isNaN(dt.getTime())) return value;
   return dt.toLocaleString('en-AU');
+};
+
+const toDisplayActor = (row: AuditLogRow) => {
+  const actor = row.actor_name?.trim() || row.actor_id?.trim() || 'System (Unauthenticated)';
+  return row.actor_role ? `${actor} (${row.actor_role})` : actor;
 };
 
 export const AuditLogsPage = () => {
@@ -118,7 +124,7 @@ export const AuditLogsPage = () => {
             {rows.map((r) => (
               <tr key={r.id}>
                 <td>{toDisplayDateTime(r.created_at)}</td>
-                <td>{r.actor_name || 'System'} {r.actor_role ? `(${r.actor_role})` : ''}</td>
+                <td>{toDisplayActor(r)}</td>
                 <td><span className={methodBadgeClass(r.method)}>{r.method}</span></td>
                 <td>{r.path}</td>
                 <td>{r.status_code}</td>
@@ -132,7 +138,7 @@ export const AuditLogsPage = () => {
           {rows.map((r) => (
             <article className="card student" key={`${r.id}-mobile`}>
               <p><strong>{toDisplayDateTime(r.created_at)}</strong></p>
-              <p>{r.actor_name || 'System'} {r.actor_role ? `(${r.actor_role})` : ''}</p>
+              <p>{toDisplayActor(r)}</p>
               <p>{r.method} • {r.status_code}</p>
               <p>{r.path}</p>
               <p>{r.entity_type || '-'} {r.entity_id ? `(${r.entity_id})` : ''}</p>

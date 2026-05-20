@@ -13,6 +13,8 @@ export type Student = {
   gender?: 'boy' | 'girl' | null;
   group_id?: string;
   group_name: string;
+  school_year_name?: string;
+  is_paid?: boolean;
   date_of_birth?: string | null;
   father_name?: string | null;
   mother_name?: string | null;

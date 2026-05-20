@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../services/api';
 import { Student } from '../types';
@@ -38,9 +38,21 @@ const toWhatsAppPhone = (value?: string | null) => {
   return digits;
 };
 
-const shortenName = (value: string, max = 15) => {
-  if (value.length <= max) return value;
-  return `${value.slice(0, max)}...`;
+const toShortSchoolYear = (value?: string | null) => {
+  if (!value) return '';
+  const normalized = value.trim().toLowerCase().replace(/[-\s]+/g, ' ');
+  if (normalized === 'kindy') return 'K';
+  if (normalized === 'pre primary') return 'PP';
+  const yearMatch = normalized.match(/^year\s*(\d+)$/);
+  if (yearMatch) return `Y${yearMatch[1]}`;
+  return value;
+};
+
+const toShortName = (fullName: string) => {
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0];
+  if (parts.length > 1) return `${parts[0]} ${parts[1][0]}.`;
+  return fullName;
 };
 
 const toDisplayDate = (value: string) => {
@@ -89,6 +101,7 @@ const getDefaultEventId = (rows: EventRow[]) => {
 
 export const AttendancePage = () => {
   const { token } = useAuth();
+  const [queryInput, setQueryInput] = useState('');
   const [query, setQuery] = useState('');
   const [students, setStudents] = useState<Student[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -98,6 +111,7 @@ export const AttendancePage = () => {
   const [attendanceTab, setAttendanceTab] = useState<'checkin' | 'checkout'>('checkin');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [msg, setMsg] = useState('');
+  const latestStudentsRequestId = useRef(0);
   const selectedEvent = events.find((e) => e.id === selectedEventId);
   const isCheckinOnlyEvent = selectedEvent?.attendance_mode === 'checkin_only';
 
@@ -108,6 +122,14 @@ export const AttendancePage = () => {
     const allowed = new Set(selectedEvent.group_ids || []);
     return groups.filter((g) => allowed.has(g.id));
   }, [groups, selectedEvent]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setQuery(queryInput.trim());
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [queryInput]);
 
   const toDateOnly = (value?: string | null) => {
     if (!value) return '-';
@@ -123,6 +145,7 @@ export const AttendancePage = () => {
 
   const loadStudents = async () => {
     if (!token) return;
+    const requestId = ++latestStudentsRequestId.current;
     const params = new URLSearchParams();
     params.set('mode', 'attendance');
     params.set('search', query);
@@ -131,6 +154,7 @@ export const AttendancePage = () => {
     if (selectedGroupId) params.set('groupId', selectedGroupId);
     if (selectedEventId) params.set('eventId', selectedEventId);
     const data = await apiFetch<StudentsApiResponse>(`/students?${params.toString()}`, {}, token);
+    if (requestId !== latestStudentsRequestId.current) return;
     setStudents(data.items);
   };
 
@@ -143,12 +167,21 @@ export const AttendancePage = () => {
   useEffect(() => {
     loadEvents().catch(() => setMsg('Failed to load events'));
     loadGroups().catch(() => setMsg('Failed to load groups'));
-    loadStudents().catch(() => setMsg('Failed to load students'));
   }, [token]);
 
   useEffect(() => {
     if (!token) return;
     loadStudents().catch(() => setMsg('Failed to load students'));
+  }, [token, selectedEventId, selectedGroupId, query]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const intervalId = window.setInterval(() => {
+      loadStudents().catch(() => setMsg('Failed to refresh students'));
+    }, 5000);
+
+    return () => window.clearInterval(intervalId);
   }, [token, selectedEventId, selectedGroupId, query]);
 
   useEffect(() => {
@@ -191,6 +224,9 @@ export const AttendancePage = () => {
     return students.filter((student) => Boolean(student.checkin_time) && !student.checkout_time);
   }, [attendanceTab, students, isCheckinOnlyEvent]);
 
+  const pendingCheckinCount = useMemo(() => students.filter((s) => !s.checkin_time).length, [students]);
+  const pendingCheckoutCount = useMemo(() => students.filter((s) => Boolean(s.checkin_time) && !s.checkout_time).length, [students]);
+
   const checkIn = async (studentId: string) => {
     if (!token || !selectedEventId) return;
     await apiFetch('/attendance/checkin', { method: 'POST', body: JSON.stringify({ studentId, eventId: selectedEventId }) }, token);
@@ -218,6 +254,19 @@ export const AttendancePage = () => {
     await loadStudents();
   };
 
+  const handleMobileAttendanceAction = async (
+    e: React.SyntheticEvent<HTMLButtonElement>,
+    studentId: string
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (attendanceTab === 'checkin') {
+      await checkIn(studentId);
+      return;
+    }
+    await checkOut(studentId);
+  };
+
   return (
     <section className="content">
       <div className="card">
@@ -242,20 +291,20 @@ export const AttendancePage = () => {
           <input
             className="attendance-filter-control"
             placeholder="Search student"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            value={queryInput}
+            onChange={(e) => setQueryInput(e.target.value)}
           />
         </div>
         {msg && <p className="ok">{msg}</p>}
       </div>
 
-      <div className="dialog-tabs" style={{ marginTop: 10 }}>
+      <div className="dialog-tabs attendance-tabs" style={{ marginTop: 10 }}>
         <button className={attendanceTab === 'checkin' ? 'tab-btn active' : 'tab-btn'} onClick={() => setAttendanceTab('checkin')}>
-          Checkin Pending ({students.filter((s) => !s.checkin_time).length})
+          Checkin Pending ({pendingCheckinCount})
         </button>
         {!isCheckinOnlyEvent && (
           <button className={attendanceTab === 'checkout' ? 'tab-btn active' : 'tab-btn'} onClick={() => setAttendanceTab('checkout')}>
-            Checkout Pending ({students.filter((s) => Boolean(s.checkin_time) && !s.checkout_time).length})
+            Checkout Pending ({pendingCheckoutCount})
           </button>
         )}
         {isCheckinOnlyEvent && (
@@ -264,29 +313,96 @@ export const AttendancePage = () => {
       </div>    
       <div className="grid-list">
         {filteredStudents.map((student) => (
-          <article className="card student" key={student.id}>
-            <div className="student-interactive" onClick={() => setSelectedStudent(student)}>
-              <h3 className="student-name-cell" title={student.full_name}>
-                <img className="student-avatar student-avatar-sm" src={getStudentAvatarUrl(student.id, student.gender)} alt="Student avatar" loading="lazy" />
-                {shortenName(student.full_name, 15)}
-              </h3>
-              <p>{student.group_name}</p>
-              <p className="student-interactive-hint">View details</p>
-            </div>
-            <div className="row wrap">
-              {toDialPhone(student.mobile_number) && (
-                <a className="btn ghost contact-btn" href={`tel:${toDialPhone(student.mobile_number)}`}>Call</a>
-              )}
-              {toWhatsAppPhone(student.mobile_number) && (
-                <a className="btn ghost contact-btn" href={`https://wa.me/${toWhatsAppPhone(student.mobile_number)}`} target="_blank" rel="noreferrer">WhatsApp</a>
-              )}
-              {attendanceTab === 'checkin' ? (
-                <button className="btn success" disabled={!selectedEventId} onClick={() => checkIn(student.id)}>Check In</button>
-              ) : (
-                <button className="btn warn" disabled={!selectedEventId} onClick={() => checkOut(student.id)}>Check Out</button>
-              )}
-            </div>
-          </article>
+          <>
+            <article className={`card student attendance-card-desktop ${student.is_paid === true ? 'paid-row' : student.is_paid === false ? 'unpaid-row' : ''}`} key={`${student.id}-desktop`}>
+              <div className="student-interactive" onClick={() => setSelectedStudent(student)}>
+                <h3 className="student-name-cell" title={student.full_name}>
+                  <img className="student-avatar student-avatar-sm" src={getStudentAvatarUrl(student.id, student.gender)} alt="Student avatar" loading="lazy" />
+                  {toShortName(student.full_name)}
+                </h3>
+                <p>{student.group_name}{toShortSchoolYear(student.school_year_name) ? ` • ${toShortSchoolYear(student.school_year_name)}` : ''}</p>
+                <p className="student-interactive-hint">View details</p>
+              </div>
+              <div className="row wrap attendance-student-actions">
+                {toDialPhone(student.mobile_number) && (
+                  <a className="btn ghost contact-btn" href={`tel:${toDialPhone(student.mobile_number)}`}>Call</a>
+                )}
+                {toWhatsAppPhone(student.mobile_number) && (
+                  <a className="btn ghost contact-btn" href={`https://wa.me/${toWhatsAppPhone(student.mobile_number)}`} target="_blank" rel="noreferrer">WhatsApp</a>
+                )}
+                {attendanceTab === 'checkin' ? (
+                  <button className="btn success" disabled={!selectedEventId} onClick={() => checkIn(student.id)}>Check In</button>
+                ) : (
+                  <button className="btn warn" disabled={!selectedEventId} onClick={() => checkOut(student.id)}>Check Out</button>
+                )}
+              </div>
+            </article>
+
+            <article className={`card student attendance-card-mobile ${student.is_paid === true ? 'paid-row' : student.is_paid === false ? 'unpaid-row' : ''}`} key={`${student.id}-mobile`}>
+              <div className="attendance-card-header-mobile">
+                <img
+                  className="student-avatar student-avatar-sm"
+                  src={getStudentAvatarUrl(student.id, student.gender)}
+                  alt="Student avatar"
+                  loading="lazy"
+                  onClick={() => setSelectedStudent(student)}
+                  style={{ cursor: 'pointer' }}
+                />
+                <span className="attendance-mobile-name" title={student.full_name}>{toShortName(student.full_name)}</span>
+                <span className="attendance-mobile-group">{student.group_name ? student.group_name.split(' ')[0] : ''}</span>
+                <span className="attendance-mobile-group">{toShortSchoolYear(student.school_year_name)}</span>
+                <span style={{ flex: 1 }} />
+                {attendanceTab === 'checkin' ? (
+                  <button
+                    type="button"
+                    className="btn success attendance-mobile-inline-action"
+                    disabled={!selectedEventId}
+                    onTouchEnd={(e) => void handleMobileAttendanceAction(e, student.id)}
+                    onClick={(e) => void handleMobileAttendanceAction(e, student.id)}
+                  >
+                    Check In
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn warn attendance-mobile-inline-action"
+                    disabled={!selectedEventId}
+                    onTouchEnd={(e) => void handleMobileAttendanceAction(e, student.id)}
+                    onClick={(e) => void handleMobileAttendanceAction(e, student.id)}
+                  >
+                    Check Out
+                  </button>
+                )}
+                {toDialPhone(student.mobile_number) && (
+                  <a
+                    className="attendance-mobile-contact-icon"
+                    href={`tel:${toDialPhone(student.mobile_number)}`}
+                    title="Call"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" style={{ color: '#0f766e', display: 'block' }} xmlns="http://www.w3.org/2000/svg">
+                      <path d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.01-.24c1.11.37 2.29.56 3.58.56a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C9.85 21 1 12.15 1 2a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.29.19 2.47.56 3.58a1 1 0 0 1-.24 1.01l-2.2 2.2Z"/>
+                    </svg>
+                  </a>
+                )}
+                {toWhatsAppPhone(student.mobile_number) && (
+                  <a
+                    className="attendance-mobile-contact-icon"
+                    href={`https://wa.me/${toWhatsAppPhone(student.mobile_number)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="WhatsApp"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <svg width="19" height="19" viewBox="0 0 20 20" fill="currentColor" style={{ color: '#25D366', display: 'block' }} xmlns="http://www.w3.org/2000/svg">
+                      <path d="M16.472 13.766c-.297-.149-1.758-.867-2.03-.967-.273-.099-.472-.148-.67.15-.198.297-.767.967-.94 1.166-.173.198-.347.223-.644.075-.297-.149-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.457.13-.605.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.372-.025-.521-.075-.149-.669-1.612-.916-2.207-.242-.58-.487-.501-.67-.51-.173-.007-.372-.009-.57-.009-.198 0-.52.075-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.099 3.205 5.086 4.369.712.307 1.267.489 1.701.625.715.228 1.366.196 1.88.119.574-.085 1.758-.719 2.007-1.413.248-.694.248-1.288.173-1.413-.074-.124-.272-.198-.57-.347z" fill="currentColor"/>
+                      <path d="M10 18.333c-4.6 0-8.333-3.733-8.333-8.333 0-4.6 3.733-8.333 8.333-8.333 4.6 0 8.333 3.733 8.333 8.333 0 4.6-3.733 8.333-8.333 8.333zm0-15c-3.683 0-6.667 2.984-6.667 6.667 0 1.18.31 2.29.85 3.25l-1.13 4.13 4.24-1.12c.93.51 1.98.8 3.07.8 3.683 0 6.667-2.984 6.667-6.667 0-3.683-2.984-6.667-6.667-6.667z" fill="currentColor"/>
+                    </svg>
+                  </a>
+                )}
+              </div>
+            </article>
+          </>
         ))}
         {!filteredStudents.length && (
           <article className="card">

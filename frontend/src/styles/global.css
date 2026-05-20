@@ -49,20 +49,48 @@ h1,h2,h3,p { margin: 0; }
 }
 .app-header h2 { font-size: 20px; line-height: 1.2; }
 .app-footer { display: flex; justify-content: center; align-items: center; text-align: center; color: var(--muted); font-size: 13px; }
-.app-shell { display: grid; gap: 14px; }
+.app-footer p {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.2;
+}
+.app-footer-main {
+  font-weight: 700;
+}
+.app-footer-sub {
+  font-size: 11px;
+  opacity: 0.9;
+  margin-top: 2px;
+}
+.app-shell {
+  display: grid;
+  gap: 14px;
+  align-items: start;
+  align-content: start;
+}
 .sidebar {
   background: linear-gradient(180deg, #f8fbf6, #eef3ea);
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 16px;
   box-shadow: 0 12px 30px #22331f1a;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
-  align-content: start;
+  align-items: stretch;
+  align-content: flex-start;
+  width: 100%;
 }
 .eyebrow { text-transform: uppercase; letter-spacing: .08em; font-size: 12px; color: var(--muted); }
 .sidebar h1 { margin-top: 4px; font-size: 30px; line-height: 1.05; }
-.sidebar-nav { display: grid; gap: 8px; }
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
 .nav-item {
   padding: 11px 14px;
   border-radius: 12px;
@@ -79,8 +107,15 @@ h1,h2,h3,p { margin: 0; }
   color: white;
   box-shadow: 0 8px 20px #16546233;
 }
-.main-panel { min-width: 0; }
-.content { display: grid; gap: 12px; }
+.main-panel {
+  min-width: 0;
+  align-self: start;
+}
+.content {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
 
 .card {
   background: var(--card);
@@ -294,6 +329,43 @@ th, td { text-align:left; padding: 10px 6px; border-bottom: 1px solid var(--line
 .attendance-filter-control {
   min-width: 0;
 }
+.attendance-card-desktop {
+  display: block;
+}
+.attendance-card-mobile {
+  display: none;
+}
+.attendance-card-header-mobile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.attendance-mobile-name {
+  font-weight: 700;
+}
+.attendance-mobile-group {
+  color: #5f665f;
+  font-size: 13px;
+}
+.attendance-mobile-contact-icon {
+  margin-left: 2px;
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  width: 20px;
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+.attendance-mobile-inline-action {
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
 .audit-log-filters-row {
   display: grid;
   gap: 8px;
@@ -410,17 +482,88 @@ th, td { text-align:left; padding: 10px 6px; border-bottom: 1px solid var(--line
 }
 .card.student.paid-row { border-left: 4px solid #2f9e44; }
 .card.student.unpaid-row { border-left: 4px solid #d64545; }
+.card.student {
+  content-visibility: auto;
+  contain-intrinsic-size: 140px;
+}
 
 @media (max-width: 768px) {
+  .sidebar {
+    gap: 0;
+    align-items: stretch;
+    width: 100%;
+    align-self: start;
+    min-height: unset;
+    height: auto;
+    padding-bottom: 16px;
+  }
+  body {
+    -webkit-text-size-adjust: 100%;
+  }
   .page-shell { padding: 12px; }
-  .app-header { flex-direction: column; align-items: flex-start; }
-  .app-header-actions { width: 100%; justify-content: space-between; }
-  .app-header h2 { font-size: 18px; }
+  .app-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+  .app-header > div:first-child {
+    min-width: 0;
+    flex: 1;
+  }
+  .app-header > div:first-child .eyebrow {
+    display: block;
+    font-size: 10px;
+    line-height: 1.1;
+    letter-spacing: .06em;
+    margin-bottom: 2px;
+  }
+  .app-header-actions {
+    width: auto;
+    justify-content: flex-end;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .app-header h2 {
+    font-size: 17px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .app-footer { justify-content: center; text-align: center; }
-  .app-shell { grid-template-columns: 1fr; }
+  .app-shell {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
   .sidebar h1 { font-size: 24px; }
-  .sidebar-nav { grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; padding-bottom: 2px; }
-  .nav-item { white-space: nowrap; border-radius: 999px; padding: 10px 14px; }
+  .sidebar-nav {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 1px;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+  }
+  .nav-item {
+    white-space: nowrap;
+    border-radius: 999px;
+    padding: 5px 6px;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .sidebar-nav-icon {
+    width: 22px;
+    height: 22px;
+    display: block;
+  }
+  .sidebar-nav-label {
+    display: none;
+  }
   .student { flex-direction: column; align-items: stretch; gap: 8px; }
   .admin-grid { grid-template-columns: 1fr; }
   .dashboard-grid { grid-template-columns: 1fr; }
@@ -433,8 +576,81 @@ th, td { text-align:left; padding: 10px 6px; border-bottom: 1px solid var(--line
   .audit-log-filters-row { grid-template-columns: 1fr; }
   .term-attendance-controls { grid-template-columns: 1fr; }
   .term-attendance-generate { justify-self: stretch; }
+  input, select, textarea {
+    font-size: 16px;
+    min-height: 44px;
+  }
+  .btn {
+    min-height: 44px;
+    padding: 11px 14px;
+  }
+  .app-header-actions .btn {
+    min-height: 34px;
+    padding: 6px 10px;
+  }
+  .contact-btn {
+    min-height: 40px;
+    min-width: 86px;
+  }
+  .attendance-tabs {
+    position: sticky;
+    top: 8px;
+    z-index: 10;
+    background: #eef4ea;
+  }
+  .attendance-student-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    align-items: stretch;
+  }
+  .attendance-student-actions .btn,
+  .attendance-student-actions .contact-btn {
+    width: 100%;
+  }
+  .attendance-card-desktop {
+    display: none;
+  }
+  .attendance-card-mobile {
+    display: block;
+    padding: 14px;
+  }
+  .attendance-card-mobile .attendance-card-header-mobile {
+    gap: 8px;
+  }
+  .attendance-card-mobile .attendance-mobile-inline-action {
+    min-height: 28px;
+    padding: 4px 8px;
+    font-size: 12px;
+    line-height: 1;
+  }
+  .modal-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+  .modal-card,
+  .student-modal-card,
+  .birthday-modal {
+    width: 100%;
+    max-width: none;
+    max-height: 90vh;
+    overflow-y: auto;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  .birthday-list {
+    max-height: none;
+  }
   .desktop-only { display: none; }
   .mobile-only { display: grid; }
+  .students-mobile-list {
+    width: 100%;
+    flex: 1 1 100%;
+    align-self: stretch;
+  }
+  .students-mobile-list .card.student {
+    width: 100%;
+  }
 }
 
 @media (min-width: 769px) and (max-width: 1099px) {
@@ -460,6 +676,34 @@ th, td { text-align:left; padding: 10px 6px; border-bottom: 1px solid var(--line
   }
   .mobile-only {
     display: none;
+  }
+  .attendance-card-desktop {
+    display: block;
+  }
+  .attendance-card-mobile {
+    display: none;
+  }
+}
+
+@media (min-width: 769px) {
+  .sidebar-nav {
+    flex-direction: column;
+    gap: 8px;
+    overflow-x: unset;
+    padding-bottom: 0;
+  }
+  .nav-item {
+    flex-direction: row;
+    padding: 11px 14px;
+    gap: 10px;
+  }
+  .sidebar-nav-label {
+    display: inline;
+    margin-left: 6px;
+  }
+  .sidebar-nav-icon {
+    width: 24px;
+    height: 24px;
   }
 }
 
@@ -514,5 +758,11 @@ th, td { text-align:left; padding: 10px 6px; border-bottom: 1px solid var(--line
   }
   .student-edit-actions {
     grid-column: 1 / -1;
+  }
+  .attendance-card-desktop {
+    display: block;
+  }
+  .attendance-card-mobile {
+    display: none;
   }
 }
