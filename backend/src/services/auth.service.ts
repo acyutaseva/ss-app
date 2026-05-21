@@ -40,22 +40,21 @@ export const login = async (email: string, password: string) => {
     { expiresIn: '12h' }
   );
 
-  // Send login notification email with a reusable template.
-  try {
-    await sendTemplatedEmail({
-      to: process.env.LOGIN_NOTIFICATION_EMAIL || 'abhishekchouhan@gmail.com',
-      subject: 'Sunday School - User Login Notification',
-      template: 'loginNotification',
-      context: {
-        userName: user.name,
-        userEmail: user.email,
-        role: user.role,
-        loginTime: new Date().toLocaleString()
-      }
-    });
-  } catch (e) {
+  // Do not block login response on external email provider latency.
+  const loginTime = new Date().toLocaleString('en-AU', { timeZone: 'Australia/Perth' });
+  void sendTemplatedEmail({
+    to: process.env.LOGIN_NOTIFICATION_EMAIL || 'abhishekchouhan@gmail.com',
+    subject: 'Sunday School - User Login Notification',
+    template: 'loginNotification',
+    context: {
+      userName: user.name,
+      userEmail: user.email,
+      role: user.role,
+      loginTime
+    }
+  }).catch((e) => {
     console.error('Failed to send login notification email:', e);
-  }
+  });
 
   return {
     token,
