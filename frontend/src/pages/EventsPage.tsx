@@ -11,6 +11,7 @@ type EventRow = {
   attendance_mode: 'full' | 'checkin_only';
   applies_all_groups: boolean;
   group_ids: string[];
+  has_report?: boolean;
   notes?: string | null;
 };
 
@@ -28,6 +29,17 @@ type AttendanceRow = {
   picked_by_name?: string | null;
   picked_by_type?: string | null;
   notes?: string | null;
+};
+
+type EventReportRow = {
+  id: string;
+  event_id: string;
+  taught_summary: string;
+  other_notes?: string | null;
+  submitted_by?: string | null;
+  submitted_by_name?: string | null;
+  submitted_at: string;
+  updated_at: string;
 };
 
 type EventFormState = {
@@ -75,6 +87,13 @@ const getEventGroupLabel = (event: EventRow, groups: Group[]) => {
   return names.length ? names.join(', ') : 'Selected groups';
 };
 
+const hasEventEnded = (ev: EventRow) => {
+  const now = new Date();
+  const eventEnd = new Date(`${ev.event_date}T${ev.end_time}`);
+  if (Number.isNaN(eventEnd.getTime())) return false;
+  return eventEnd.getTime() <= now.getTime();
+};
+
 export const EventsPage = () => {
   const { token, user } = useAuth();
   const isAdmin = user?.role === 'admin';
@@ -84,9 +103,17 @@ export const EventsPage = () => {
   const [selectedEventId, setSelectedEventId] = useState('');
   const [attendance, setAttendance] = useState<AttendanceRow[]>([]);
   const [attendancePage, setAttendancePage] = useState(1);
+  const [report, setReport] = useState<EventReportRow | null>(null);
+  const [taughtSummary, setTaughtSummary] = useState('');
+  const [otherNotes, setOtherNotes] = useState('');
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportSaving, setReportSaving] = useState(false);
+  const [reportMsg, setReportMsg] = useState('');
+  const [reportError, setReportError] = useState('');
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
   const [showAddEvent, setShowAddEvent] = useState(false);
+  const [showEventReportDialog, setShowEventReportDialog] = useState(false);
   const [addError, setAddError] = useState('');
   const [form, setForm] = useState<EventFormState>({
     name: '',
@@ -118,6 +145,17 @@ export const EventsPage = () => {
     const start = (attendancePage - 1) * attendancePageSize;
     return attendance.slice(start, start + attendancePageSize);
   }, [attendance, attendancePage]);
+
+  const selectedEvent = useMemo(
+    () => events.find((ev) => ev.id === selectedEventId) || null,
+    [events, selectedEventId]
+  );
+
+  const canSubmitEventReport = useMemo(() => {
+    if (!selectedEvent || !user) return false;
+    if (user.role !== 'teacher') return true;
+    return hasEventEnded(selectedEvent);
+  }, [selectedEvent, user]);
 
   const toEventForm = (ev: EventRow): EditEventState => ({
     id: ev.id,
@@ -158,6 +196,26 @@ export const EventsPage = () => {
     setAttendance(rows);
   };
 
+  const loadEventReport = async (eventId: string) => {
+    if (!token || !eventId) return;
+    setReportLoading(true);
+    setReportError('');
+    try {
+      const data = await apiFetch<{ report: EventReportRow | null }>(`/events/${eventId}/report`, {}, token);
+      const current = data.report;
+      setReport(current);
+      setTaughtSummary(current?.taught_summary || '');
+      setOtherNotes(current?.other_notes || '');
+    } catch {
+      setReportError('Failed to load event report');
+      setReport(null);
+      setTaughtSummary('');
+      setOtherNotes('');
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadEvents().catch(() => setError('Failed to load events'));
     loadGroups().catch(() => setError('Failed to load groups'));
@@ -172,6 +230,16 @@ export const EventsPage = () => {
   useEffect(() => {
     if (isAdmin && selectedEventId) loadAttendance(selectedEventId).catch(() => setError('Failed to load event attendance'));
   }, [selectedEventId, isAdmin]);
+
+  useEffect(() => {
+    if (!selectedEventId || !token) {
+      setReport(null);
+      setTaughtSummary('');
+      setOtherNotes('');
+      return;
+    }
+    loadEventReport(selectedEventId).catch(() => setReportError('Failed to load event report'));
+  }, [selectedEventId, token]);
 
   useEffect(() => {
     setAttendancePage(1);
@@ -259,6 +327,57 @@ export const EventsPage = () => {
     return [...ids, groupId];
   };
 
+  const openEventReportDialog = (eventId: string) => {
+    setSelectedEventId(eventId);
+    setReportMsg('');
+    setReportError('');
+    setShowEventReportDialog(true);
+  };
+
+  const closeEventReportDialog = () => {
+    setShowEventReportDialog(false);
+    setReportMsg('');
+    setReportError('');
+  };
+
+  const saveEventReport = async () => {
+    if (!token || !selectedEventId) return;
+    const trimmedSummary = taughtSummary.trim();
+    if (trimmedSummary.length < 10) {
+      setReportError('What was taught must be at least 10 characters.');
+      return;
+    }
+
+    setReportSaving(true);
+    setReportMsg('');
+    setReportError('');
+    try {
+      const saved = await apiFetch<EventReportRow>(
+        `/events/${selectedEventId}/report`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            taughtSummary: trimmedSummary,
+            otherNotes: otherNotes.trim() || undefined
+          })
+        },
+        token
+      );
+      setReport(saved);
+      setEvents((prev) => prev.map((event) => (event.id === selectedEventId ? { ...event, has_report: true } : event)));
+      setTaughtSummary(saved.taught_summary || '');
+      setOtherNotes(saved.other_notes || '');
+      setReportMsg('Event report saved');
+      setShowEventReportDialog(false);
+    } catch (e) {
+      let message = 'Failed to save event report';
+      if (e instanceof Error && e.message) message = e.message;
+      setReportError(message);
+    } finally {
+      setReportSaving(false);
+    }
+  };
+
   return (
     <section className="content">
       <div className="card">
@@ -279,26 +398,36 @@ export const EventsPage = () => {
               <th>Time</th>
               <th>Mode</th>
               <th>Groups</th>
-              {isAdmin && <th>Actions</th>}
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {eventsPageRows.map((ev) => (
               <tr key={ev.id} onClick={() => setViewEvent(ev)} style={{ cursor: 'pointer' }}>
-                <td>{ev.name}</td>
+                <td>
+                  {ev.name}
+                  {ev.has_report && (
+                    <span className="eyebrow" style={{ marginLeft: 8 }}>Report submitted</span>
+                  )}
+                </td>
                 <td>{formatDateOnly(ev.event_date)}</td>
                 <td>{formatTimeOnly(ev.start_time)} - {formatTimeOnly(ev.end_time)}</td>
                 <td>{ev.attendance_mode === 'checkin_only' ? 'Check-in Only' : 'Full'}</td>
                 <td>{getEventGroupLabel(ev, groups)}</td>
-                {isAdmin && (
-                  <td>
-                    <div className="row wrap" onClick={(e) => e.stopPropagation()}>
-                      <button className="btn ghost contact-btn" onClick={() => setSelectedEventId(ev.id)}>Attendance</button>
-                      <button className="btn ghost contact-btn edit-btn" onClick={() => setEditForm(toEventForm(ev))}>Edit</button>
-                      <button className="btn warn contact-btn" onClick={() => setConfirmDeleteEvent(ev)}>Delete</button>
-                    </div>
-                  </td>
-                )}
+                <td>
+                  <div className="row wrap" onClick={(e) => e.stopPropagation()}>
+                    <button className="btn ghost contact-btn" onClick={() => openEventReportDialog(ev.id)}>
+                      {ev.has_report ? 'Update Report' : 'Report'}
+                    </button>
+                    {isAdmin && (
+                      <>
+                        <button className="btn ghost contact-btn" onClick={() => setSelectedEventId(ev.id)}>Attendance</button>
+                        <button className="btn ghost contact-btn edit-btn" onClick={() => setEditForm(toEventForm(ev))}>Edit</button>
+                        <button className="btn warn contact-btn" onClick={() => setConfirmDeleteEvent(ev)}>Delete</button>
+                      </>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -308,7 +437,12 @@ export const EventsPage = () => {
           {eventsPageRows.map((ev) => (
             <article key={`${ev.id}-mobile`} className="card student" onClick={() => setViewEvent(ev)} style={{ cursor: 'pointer' }}>
               <div>
-                <h3>{ev.name}</h3>
+                <h3>
+                  {ev.name}
+                  {ev.has_report && (
+                    <span className="eyebrow" style={{ marginLeft: 8 }}>Report submitted</span>
+                  )}
+                </h3>
                 <p>{formatDateOnly(ev.event_date)}</p>
                 <p>{formatTimeOnly(ev.start_time)} - {formatTimeOnly(ev.end_time)}</p>
                 <p>{ev.attendance_mode === 'checkin_only' ? 'Check-in Only' : 'Full'}</p>
@@ -321,6 +455,11 @@ export const EventsPage = () => {
                   <button className="btn warn contact-btn" onClick={() => setConfirmDeleteEvent(ev)}>Delete</button>
                 </div>
               )}
+              <div className="row wrap" onClick={(e) => e.stopPropagation()}>
+                <button className="btn ghost contact-btn" onClick={() => openEventReportDialog(ev.id)}>
+                  {ev.has_report ? 'Update Report' : 'Report'}
+                </button>
+              </div>
             </article>
           ))}
         </div>
@@ -392,6 +531,63 @@ export const EventsPage = () => {
                 >
                   Next
                 </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showEventReportDialog && (
+        <div className="modal-backdrop" onClick={closeEventReportDialog}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <h2>{report ? 'Update Event Report' : 'Submit Event Report'}</h2>
+            {selectedEvent && (
+              <p className="eyebrow" style={{ marginTop: -6 }}>
+                {selectedEvent.name} ({formatDateOnly(selectedEvent.event_date)})
+              </p>
+            )}
+            {reportLoading ? (
+              <p className="eyebrow">Loading event report...</p>
+            ) : (
+              <div className="form-grid">
+                {selectedEvent && user?.role === 'teacher' && !canSubmitEventReport && (
+                  <p className="eyebrow field-span-2">Teachers can submit report only after event end time.</p>
+                )}
+                <label className="field field-span-2">
+                  <span className="field-label">What was taught</span>
+                  <textarea
+                    value={taughtSummary}
+                    onChange={(e) => setTaughtSummary(e.target.value)}
+                    placeholder="Briefly describe what was taught in this event"
+                    rows={4}
+                  />
+                </label>
+                <label className="field field-span-2">
+                  <span className="field-label">Other notes</span>
+                  <textarea
+                    value={otherNotes}
+                    onChange={(e) => setOtherNotes(e.target.value)}
+                    placeholder="Any extra notes"
+                    rows={3}
+                  />
+                </label>
+                {report && (
+                  <p className="eyebrow field-span-2">
+                    Last submitted by {report.submitted_by_name || 'Unknown'} on {new Date(report.updated_at).toLocaleString()}
+                  </p>
+                )}
+                <div className="row">
+                  <button
+                    className="btn primary"
+                    disabled={reportSaving || !canSubmitEventReport}
+                    onClick={() => saveEventReport().catch(() => setReportError('Failed to save event report'))}
+                  >
+                    {reportSaving ? 'Saving...' : report ? 'Update Report' : 'Submit Report'}
+                  </button>
+                  <button className="btn ghost" onClick={closeEventReportDialog}>Cancel</button>
+                </div>
+                {reportMsg && <p className="ok field-span-2">{reportMsg}</p>}
+                {reportError && <p className="error field-span-2">{reportError}</p>}
               </div>
             )}
           </div>

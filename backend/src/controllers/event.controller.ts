@@ -15,6 +15,21 @@ const eventSchema = z.object({
 
 const updateEventSchema = eventSchema.partial();
 
+const eventReportSchema = z.object({
+  taughtSummary: z.string().min(10).max(5000),
+  otherNotes: z.string().max(5000).optional()
+});
+
+const hasEventEnded = (event: { event_date: string; end_time: string }) => {
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const currentTime = now.toTimeString().slice(0, 8);
+
+  if (event.event_date < today) return true;
+  if (event.event_date === today && event.end_time <= currentTime) return true;
+  return false;
+};
+
 export const listEventsHandler = async (req: Request, res: Response) => {
   const mode = String(req.query.mode || '').trim();
   let sql = `
@@ -27,6 +42,11 @@ export const listEventsHandler = async (req: Request, res: Response) => {
       e.attendance_mode,
       e.applies_all_groups,
       e.notes,
+      EXISTS (
+        SELECT 1
+        FROM event_reports er
+        WHERE er.event_id = e.id
+      ) AS has_report,
       COALESCE(
         (
           SELECT JSON_AGG(eg.group_id ORDER BY eg.group_id)
@@ -214,4 +234,85 @@ export const eventAttendanceHandler = async (req: Request, res: Response) => {
   );
 
   return res.json(result.rows);
+};
+
+export const getEventReportHandler = async (req: Request, res: Response) => {
+  const eventId = String(req.params.eventId || '');
+  const event = await pool.query('SELECT id FROM events WHERE id = $1 LIMIT 1', [eventId]);
+  if (!event.rowCount) return res.status(404).json({ message: 'Event not found' });
+
+  const result = await pool.query(
+    `SELECT
+      er.id,
+      er.event_id,
+      er.taught_summary,
+      er.other_notes,
+      er.submitted_by,
+      u.name AS submitted_by_name,
+      er.submitted_at,
+      er.updated_at
+     FROM event_reports er
+     LEFT JOIN users u ON u.id = er.submitted_by
+     WHERE er.event_id = $1
+     LIMIT 1`,
+    [eventId]
+  );
+
+  return res.json({ report: result.rows[0] || null });
+};
+
+export const upsertEventReportHandler = async (req: Request, res: Response) => {
+  const eventId = String(req.params.eventId || '');
+  const parsed = eventReportSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: 'Invalid input' });
+  if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+
+  const eventResult = await pool.query(
+    'SELECT id, event_date, end_time FROM events WHERE id = $1 LIMIT 1',
+    [eventId]
+  );
+  if (!eventResult.rowCount) return res.status(404).json({ message: 'Event not found' });
+
+  const event = eventResult.rows[0] as { id: string; event_date: string; end_time: string };
+  if (req.user.role === 'teacher' && !hasEventEnded(event)) {
+    return res.status(400).json({ message: 'Teachers can submit event report only after event completion' });
+  }
+
+  const d = parsed.data;
+  const taughtSummary = d.taughtSummary.trim();
+  const otherNotes = d.otherNotes?.trim() || null;
+  if (taughtSummary.length < 10) {
+    return res.status(400).json({ message: 'What was taught must be at least 10 characters' });
+  }
+
+  const result = await pool.query(
+    `INSERT INTO event_reports (event_id, taught_summary, other_notes, submitted_by)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (event_id) DO UPDATE
+     SET taught_summary = EXCLUDED.taught_summary,
+         other_notes = EXCLUDED.other_notes,
+         submitted_by = EXCLUDED.submitted_by,
+         updated_at = NOW()
+     RETURNING id, event_id, taught_summary, other_notes, submitted_by, submitted_at, updated_at`,
+    [eventId, taughtSummary, otherNotes, req.user.id]
+  );
+
+  const row = result.rows[0];
+  const withUser = await pool.query(
+    `SELECT
+      $1::uuid AS id,
+      $2::uuid AS event_id,
+      $3::text AS taught_summary,
+      $4::text AS other_notes,
+      $5::uuid AS submitted_by,
+      u.name AS submitted_by_name,
+      $6::timestamptz AS submitted_at,
+      $7::timestamptz AS updated_at
+     FROM users u
+     WHERE u.id = $5
+     LIMIT 1`,
+    [row.id, row.event_id, row.taught_summary, row.other_notes, row.submitted_by, row.submitted_at, row.updated_at]
+  );
+
+  return res.json(withUser.rows[0] || row);
 };

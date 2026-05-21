@@ -10,7 +10,9 @@ import {
   createEventHandler,
   deleteEventHandler,
   eventAttendanceHandler,
+  getEventReportHandler,
   listEventsHandler,
+  upsertEventReportHandler,
   updateEventHandler
 } from '../controllers/event.controller.js';
 import {
@@ -48,6 +50,8 @@ router.get('/groups', requireAuth, requireRole('admin', 'teacher'), listGroupsHa
 router.get('/school-years', requireAuth, requireRole('admin', 'teacher'), listSchoolYearsHandler);
 router.get('/dashboard/summary', requireAuth, requireRole('admin', 'teacher'), dashboardSummaryHandler);
 router.get('/events', requireAuth, requireRole('admin', 'teacher'), listEventsHandler);
+router.get('/events/:eventId/report', requireAuth, requireRole('admin', 'teacher'), getEventReportHandler);
+router.put('/events/:eventId/report', requireAuth, requireRole('admin', 'teacher'), upsertEventReportHandler);
 
 router.post('/admin/students', requireAuth, requireRole('admin'), createStudentHandler);
 router.patch('/admin/students/:studentId', requireAuth, requireRole('admin'), updateStudentHandler);

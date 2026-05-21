@@ -3,6 +3,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 DROP TABLE IF EXISTS
   attendance_records,
   audit_logs,
+  event_reports,
   event_groups,
   events,
   student_enrollments,
@@ -144,6 +145,18 @@ ALTER TABLE events
 UPDATE events
 SET attendance_mode = 'full'
 WHERE attendance_mode IS NULL OR attendance_mode = '';
+
+CREATE TABLE IF NOT EXISTS event_reports (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id UUID NOT NULL UNIQUE REFERENCES events(id) ON DELETE CASCADE,
+  taught_summary TEXT NOT NULL,
+  other_notes TEXT,
+  submitted_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS event_reports_event_id_idx ON event_reports(event_id);
 
 CREATE TABLE IF NOT EXISTS event_groups (
   event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
