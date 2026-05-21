@@ -58,7 +58,8 @@ type EditEventState = EventFormState & {
 };
 
 const toEventDateTime = (ev: EventRow) => {
-  const iso = `${ev.event_date}T${ev.start_time}`;
+  const eventDate = ev.event_date?.includes('T') ? ev.event_date.split('T')[0] : ev.event_date;
+  const iso = `${eventDate}T${ev.start_time}`;
   const dt = new Date(iso);
   return Number.isNaN(dt.getTime()) ? null : dt;
 };
@@ -88,8 +89,9 @@ const getEventGroupLabel = (event: EventRow, groups: Group[]) => {
 };
 
 const hasEventEnded = (ev: EventRow) => {
+  const eventDate = ev.event_date?.includes('T') ? ev.event_date.split('T')[0] : ev.event_date;
   const now = new Date();
-  const eventEnd = new Date(`${ev.event_date}T${ev.end_time}`);
+  const eventEnd = new Date(`${eventDate}T${ev.end_time}`);
   if (Number.isNaN(eventEnd.getTime())) return false;
   return eventEnd.getTime() <= now.getTime();
 };
@@ -110,6 +112,7 @@ export const EventsPage = () => {
   const [reportSaving, setReportSaving] = useState(false);
   const [reportMsg, setReportMsg] = useState('');
   const [reportError, setReportError] = useState('');
+  const [reportEventId, setReportEventId] = useState('');
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
   const [showAddEvent, setShowAddEvent] = useState(false);
@@ -131,6 +134,16 @@ export const EventsPage = () => {
   const eventsPageSize = 5;
   const attendancePageSize = 10;
   const formatDateOnly = (value: string) => value?.includes('T') ? value.split('T')[0] : value;
+  const formatEventDate = (value: string) => {
+    const dateOnly = formatDateOnly(value);
+    const [year, month, day] = dateOnly.split('-').map(Number);
+    if (!year || !month || !day) return dateOnly;
+    return new Date(year, month - 1, day).toLocaleDateString('en-AU', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+  };
   const formatTimeOnly = (value: string) => value?.slice(0, 5) || value;
 
   const totalEventsPages = Math.max(1, Math.ceil(events.length / eventsPageSize));
@@ -151,11 +164,16 @@ export const EventsPage = () => {
     [events, selectedEventId]
   );
 
+  const reportEvent = useMemo(
+    () => events.find((ev) => ev.id === reportEventId) || null,
+    [events, reportEventId]
+  );
+
   const canSubmitEventReport = useMemo(() => {
-    if (!selectedEvent || !user) return false;
+    if (!reportEvent || !user) return false;
     if (user.role !== 'teacher') return true;
-    return hasEventEnded(selectedEvent);
-  }, [selectedEvent, user]);
+    return hasEventEnded(reportEvent);
+  }, [reportEvent, user]);
 
   const toEventForm = (ev: EventRow): EditEventState => ({
     id: ev.id,
@@ -232,14 +250,15 @@ export const EventsPage = () => {
   }, [selectedEventId, isAdmin]);
 
   useEffect(() => {
-    if (!selectedEventId || !token) {
+    if (!reportEventId || !token) {
+      setReportLoading(false);
       setReport(null);
       setTaughtSummary('');
       setOtherNotes('');
       return;
     }
-    loadEventReport(selectedEventId).catch(() => setReportError('Failed to load event report'));
-  }, [selectedEventId, token]);
+    loadEventReport(reportEventId).catch(() => setReportError('Failed to load event report'));
+  }, [reportEventId, token]);
 
   useEffect(() => {
     setAttendancePage(1);
@@ -329,6 +348,11 @@ export const EventsPage = () => {
 
   const openEventReportDialog = (eventId: string) => {
     setSelectedEventId(eventId);
+    setReportEventId(eventId);
+    setReport(null);
+    setTaughtSummary('');
+    setOtherNotes('');
+    setReportLoading(true);
     setReportMsg('');
     setReportError('');
     setShowEventReportDialog(true);
@@ -336,12 +360,14 @@ export const EventsPage = () => {
 
   const closeEventReportDialog = () => {
     setShowEventReportDialog(false);
+    setReportEventId('');
+    setReportLoading(false);
     setReportMsg('');
     setReportError('');
   };
 
   const saveEventReport = async () => {
-    if (!token || !selectedEventId) return;
+    if (!token || !reportEventId) return;
     const trimmedSummary = taughtSummary.trim();
     if (trimmedSummary.length < 10) {
       setReportError('What was taught must be at least 10 characters.');
@@ -353,7 +379,7 @@ export const EventsPage = () => {
     setReportError('');
     try {
       const saved = await apiFetch<EventReportRow>(
-        `/events/${selectedEventId}/report`,
+        `/events/${reportEventId}/report`,
         {
           method: 'PUT',
           body: JSON.stringify({
@@ -364,11 +390,12 @@ export const EventsPage = () => {
         token
       );
       setReport(saved);
-      setEvents((prev) => prev.map((event) => (event.id === selectedEventId ? { ...event, has_report: true } : event)));
+      setEvents((prev) => prev.map((event) => (event.id === saved.event_id ? { ...event, has_report: true } : event)));
       setTaughtSummary(saved.taught_summary || '');
       setOtherNotes(saved.other_notes || '');
       setReportMsg('Event report saved');
       setShowEventReportDialog(false);
+      setReportEventId('');
     } catch (e) {
       let message = 'Failed to save event report';
       if (e instanceof Error && e.message) message = e.message;
@@ -410,12 +437,12 @@ export const EventsPage = () => {
                     <span className="eyebrow" style={{ marginLeft: 8 }}>Report submitted</span>
                   )}
                 </td>
-                <td>{formatDateOnly(ev.event_date)}</td>
+                <td>{formatEventDate(ev.event_date)}</td>
                 <td>{formatTimeOnly(ev.start_time)} - {formatTimeOnly(ev.end_time)}</td>
                 <td>{ev.attendance_mode === 'checkin_only' ? 'Check-in Only' : 'Full'}</td>
                 <td>{getEventGroupLabel(ev, groups)}</td>
                 <td>
-                  <div className="row wrap" onClick={(e) => e.stopPropagation()}>
+                  <div className="row event-table-actions" onClick={(e) => e.stopPropagation()}>
                     <button className="btn ghost contact-btn" onClick={() => openEventReportDialog(ev.id)}>
                       {ev.has_report ? 'Update Report' : 'Report'}
                     </button>
@@ -443,7 +470,7 @@ export const EventsPage = () => {
                     <span className="eyebrow" style={{ marginLeft: 8 }}>Report submitted</span>
                   )}
                 </h3>
-                <p>{formatDateOnly(ev.event_date)}</p>
+                <p>{formatEventDate(ev.event_date)}</p>
                 <p>{formatTimeOnly(ev.start_time)} - {formatTimeOnly(ev.end_time)}</p>
                 <p>{ev.attendance_mode === 'checkin_only' ? 'Check-in Only' : 'Full'}</p>
                 <p>{getEventGroupLabel(ev, groups)}</p>
@@ -540,56 +567,54 @@ export const EventsPage = () => {
       {showEventReportDialog && (
         <div className="modal-backdrop" onClick={closeEventReportDialog}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h2>{report ? 'Update Event Report' : 'Submit Event Report'}</h2>
-            {selectedEvent && (
-              <p className="eyebrow" style={{ marginTop: -6 }}>
-                {selectedEvent.name} ({formatDateOnly(selectedEvent.event_date)})
+            <h2 style={{ paddingBottom: 12 }}>{report ? 'Update Event Report' : 'Submit Event Report'}</h2>
+            {reportEvent && (
+              <p className="eyebrow" style={{ paddingBottom: 12 }}>
+                {reportEvent.name} ({formatDateOnly(reportEvent.event_date)})
               </p>
             )}
-            {reportLoading ? (
-              <p className="eyebrow">Loading event report...</p>
-            ) : (
-              <div className="form-grid">
-                {selectedEvent && user?.role === 'teacher' && !canSubmitEventReport && (
-                  <p className="eyebrow field-span-2">Teachers can submit report only after event end time.</p>
-                )}
-                <label className="field field-span-2">
-                  <span className="field-label">What was taught</span>
-                  <textarea
-                    value={taughtSummary}
-                    onChange={(e) => setTaughtSummary(e.target.value)}
-                    placeholder="Briefly describe what was taught in this event"
-                    rows={4}
-                  />
-                </label>
-                <label className="field field-span-2">
-                  <span className="field-label">Other notes</span>
-                  <textarea
-                    value={otherNotes}
-                    onChange={(e) => setOtherNotes(e.target.value)}
-                    placeholder="Any extra notes"
-                    rows={3}
-                  />
-                </label>
-                {report && (
-                  <p className="eyebrow field-span-2">
-                    Last submitted by {report.submitted_by_name || 'Unknown'} on {new Date(report.updated_at).toLocaleString()}
-                  </p>
-                )}
-                <div className="row">
-                  <button
-                    className="btn primary"
-                    disabled={reportSaving || !canSubmitEventReport}
-                    onClick={() => saveEventReport().catch(() => setReportError('Failed to save event report'))}
-                  >
-                    {reportSaving ? 'Saving...' : report ? 'Update Report' : 'Submit Report'}
-                  </button>
-                  <button className="btn ghost" onClick={closeEventReportDialog}>Cancel</button>
-                </div>
-                {reportMsg && <p className="ok field-span-2">{reportMsg}</p>}
-                {reportError && <p className="error field-span-2">{reportError}</p>}
+            <div className="form-grid">
+              {reportEvent && user?.role === 'teacher' && !canSubmitEventReport && (
+                <p className="eyebrow field-span-2">Teachers can submit report only after event end time.</p>
+              )}
+              <label className="field field-span-2">
+                <span className="field-label">What was taught</span>
+                <textarea
+                  value={taughtSummary}
+                  onChange={(e) => setTaughtSummary(e.target.value)}
+                  placeholder="Briefly describe what was taught in this event"
+                  disabled={reportLoading}
+                  rows={4}
+                />
+              </label>
+              <label className="field field-span-2">
+                <span className="field-label">Other notes</span>
+                <textarea
+                  value={otherNotes}
+                  onChange={(e) => setOtherNotes(e.target.value)}
+                  placeholder="Any extra notes"
+                  disabled={reportLoading}
+                  rows={3}
+                />
+              </label>
+              {report && (
+                <p className="eyebrow field-span-2">
+                  Last submitted by {report.submitted_by_name || 'Unknown'} on {new Date(report.updated_at).toLocaleString()}
+                </p>
+              )}
+              <div className="row">
+                <button
+                  className="btn primary"
+                  disabled={reportLoading || reportSaving || !canSubmitEventReport}
+                  onClick={() => saveEventReport().catch(() => setReportError('Failed to save event report'))}
+                >
+                  {reportLoading ? 'Loading...' : reportSaving ? 'Saving...' : report ? 'Update Report' : 'Submit Report'}
+                </button>
+                <button className="btn ghost" onClick={closeEventReportDialog}>Cancel</button>
               </div>
-            )}
+              {reportMsg && <p className="ok field-span-2">{reportMsg}</p>}
+              {reportError && <p className="error field-span-2">{reportError}</p>}
+            </div>
           </div>
         </div>
       )}

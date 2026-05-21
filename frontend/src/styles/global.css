@@ -240,6 +240,14 @@ h1,h2,h3,p { margin: 0; }
 .event-row { display:flex; justify-content:space-between; gap: 12px; align-items:flex-start; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .event-row-main { min-width: 180px; flex: 1; }
 .event-actions { justify-content: flex-end; }
+.event-table-actions {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+.event-table-actions .contact-btn {
+  min-width: 0;
+  padding: 4px 8px;
+}
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -330,10 +338,14 @@ th, td { text-align:left; padding: 10px 6px; border-bottom: 1px solid var(--line
 .attendance-filters-row {
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(300px, 2.2fr) minmax(160px, 1fr) minmax(180px, 1fr);
+  grid-template-columns: minmax(300px, 2.2fr) minmax(160px, 1fr) minmax(180px, 1fr) auto;
 }
 .attendance-filter-control {
   min-width: 0;
+}
+.attendance-export-btn {
+  white-space: nowrap;
+  justify-self: end;
 }
 .attendance-card-desktop {
   display: block;
@@ -482,6 +494,7 @@ th, td { text-align:left; padding: 10px 6px; border-bottom: 1px solid var(--line
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  white-space: nowrap;
   border-radius: 999px;
   padding: 4px 10px;
   font-size: 12px;
@@ -596,6 +609,10 @@ th, td { text-align:left; padding: 10px 6px; border-bottom: 1px solid var(--line
   .event-row { flex-direction: column; }
   .event-actions { justify-content: flex-start; }
   .attendance-filters-row { grid-template-columns: 1fr; }
+  .attendance-export-btn {
+    width: 100%;
+    justify-self: stretch;
+  }
   .audit-log-filters-row { grid-template-columns: 1fr; }
   .term-attendance-controls { grid-template-columns: 1fr; }
   .term-attendance-generate { justify-self: stretch; }
@@ -705,6 +722,13 @@ th, td { text-align:left; padding: 10px 6px; border-bottom: 1px solid var(--line
   }
   .attendance-card-mobile {
     display: none;
+  }
+  .attendance-filters-row {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+  .attendance-export-btn {
+    width: 100%;
+    justify-self: stretch;
   }
 }
 

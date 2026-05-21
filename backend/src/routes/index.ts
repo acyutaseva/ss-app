@@ -10,6 +10,7 @@ import {
   createEventHandler,
   deleteEventHandler,
   eventAttendanceHandler,
+  eventExportReportHandler,
   getEventReportHandler,
   listEventsHandler,
   upsertEventReportHandler,
@@ -50,6 +51,7 @@ router.get('/groups', requireAuth, requireRole('admin', 'teacher'), listGroupsHa
 router.get('/school-years', requireAuth, requireRole('admin', 'teacher'), listSchoolYearsHandler);
 router.get('/dashboard/summary', requireAuth, requireRole('admin', 'teacher'), dashboardSummaryHandler);
 router.get('/events', requireAuth, requireRole('admin', 'teacher'), listEventsHandler);
+router.get('/events/:eventId/export-report', requireAuth, requireRole('admin', 'teacher'), eventExportReportHandler);
 router.get('/events/:eventId/report', requireAuth, requireRole('admin', 'teacher'), getEventReportHandler);
 router.put('/events/:eventId/report', requireAuth, requireRole('admin', 'teacher'), upsertEventReportHandler);
 

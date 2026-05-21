@@ -20,16 +20,6 @@ const eventReportSchema = z.object({
   otherNotes: z.string().max(5000).optional()
 });
 
-const hasEventEnded = (event: { event_date: string; end_time: string }) => {
-  const now = new Date();
-  const today = now.toISOString().slice(0, 10);
-  const currentTime = now.toTimeString().slice(0, 8);
-
-  if (event.event_date < today) return true;
-  if (event.event_date === today && event.end_time <= currentTime) return true;
-  return false;
-};
-
 export const listEventsHandler = async (req: Request, res: Response) => {
   const mode = String(req.query.mode || '').trim();
   let sql = `
@@ -236,6 +226,105 @@ export const eventAttendanceHandler = async (req: Request, res: Response) => {
   return res.json(result.rows);
 };
 
+export const eventExportReportHandler = async (req: Request, res: Response) => {
+  const eventId = String(req.params.eventId || '');
+  const values = [eventId];
+  let teacherAccessSql = '';
+
+  if (req.user?.role === 'teacher') {
+    values.push(req.user.id);
+    teacherAccessSql = `
+      AND (
+        NOT EXISTS (SELECT 1 FROM teacher_groups tg WHERE tg.teacher_id = $2)
+        OR e.applies_all_groups = true
+        OR EXISTS (
+          SELECT 1
+          FROM event_groups eg
+          JOIN teacher_groups tg ON tg.group_id = eg.group_id
+          WHERE eg.event_id = e.id
+            AND tg.teacher_id = $2
+        )
+      )
+    `;
+  }
+
+  const eventResult = await pool.query(
+    `SELECT
+      e.id,
+      e.name,
+      e.event_date,
+      e.start_time,
+      e.end_time,
+      e.attendance_mode,
+      e.applies_all_groups,
+      e.notes,
+      COALESCE(
+        (
+          SELECT JSON_AGG(g.name ORDER BY g.name)
+          FROM event_groups eg
+          JOIN groups g ON g.id = eg.group_id
+          WHERE eg.event_id = e.id
+        ),
+        '[]'::json
+      ) AS group_names
+     FROM events e
+     WHERE e.id = $1
+     ${teacherAccessSql}
+     LIMIT 1`,
+    values
+  );
+  if (!eventResult.rowCount) return res.status(404).json({ message: 'Event not found' });
+
+  const reportResult = await pool.query(
+    `SELECT
+      er.taught_summary,
+      er.other_notes,
+      er.submitted_at,
+      er.updated_at,
+      u.name AS submitted_by_name
+     FROM event_reports er
+     LEFT JOIN users u ON u.id = er.submitted_by
+     WHERE er.event_id = $1
+     LIMIT 1`,
+    [eventId]
+  );
+
+  const attendanceResult = await pool.query(
+    `SELECT
+      s.full_name,
+      g.name AS group_name,
+      ar.checkin_time,
+      ar.checkout_time,
+      ar.dropped_by,
+      ar.picked_by_name,
+      ar.picked_by_type,
+      ar.notes
+     FROM attendance_records ar
+     JOIN student_enrollments se ON se.id = ar.enrollment_id
+     JOIN students s ON s.id = se.student_id
+     JOIN groups g ON g.id = se.group_id
+     WHERE ar.event_id = $1
+       AND ar.checkin_time IS NOT NULL
+       AND (
+         EXISTS (
+           SELECT 1
+           FROM events e
+           WHERE e.id = $1
+             AND e.attendance_mode = 'checkin_only'
+         )
+         OR ar.checkout_time IS NOT NULL
+       )
+     ORDER BY g.name, s.full_name`,
+    [eventId]
+  );
+
+  return res.json({
+    event: eventResult.rows[0],
+    report: reportResult.rows[0] || null,
+    attended: attendanceResult.rows
+  });
+};
+
 export const getEventReportHandler = async (req: Request, res: Response) => {
   const eventId = String(req.params.eventId || '');
   const event = await pool.query('SELECT id FROM events WHERE id = $1 LIMIT 1', [eventId]);
@@ -268,13 +357,18 @@ export const upsertEventReportHandler = async (req: Request, res: Response) => {
   if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
 
   const eventResult = await pool.query(
-    'SELECT id, event_date, end_time FROM events WHERE id = $1 LIMIT 1',
+    `SELECT
+      id,
+      event_date <= CURRENT_DATE AS can_accept_teacher_report
+     FROM events
+     WHERE id = $1
+     LIMIT 1`,
     [eventId]
   );
   if (!eventResult.rowCount) return res.status(404).json({ message: 'Event not found' });
 
-  const event = eventResult.rows[0] as { id: string; event_date: string; end_time: string };
-  if (req.user.role === 'teacher' && !hasEventEnded(event)) {
+  const event = eventResult.rows[0] as { id: string; can_accept_teacher_report: boolean };
+  if (req.user.role === 'teacher' && !event.can_accept_teacher_report) {
     return res.status(400).json({ message: 'Teachers can submit event report only after event completion' });
   }
 

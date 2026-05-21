@@ -24,6 +24,42 @@ type EventRow = {
   group_ids: string[];
 };
 
+type EventExportReport = {
+  event: EventRow & {
+    notes?: string | null;
+    group_names: string[];
+  };
+  report: {
+    taught_summary: string;
+    other_notes?: string | null;
+    submitted_by_name?: string | null;
+    submitted_at: string;
+    updated_at: string;
+  } | null;
+  attended: {
+    full_name: string;
+    group_name: string;
+    checkin_time?: string | null;
+    checkout_time?: string | null;
+    dropped_by?: string | null;
+    picked_by_name?: string | null;
+    picked_by_type?: string | null;
+    notes?: string | null;
+  }[];
+};
+
+const escapeHtml = (value?: string | null) => {
+  if (!value) return '';
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
+const toFileSafeName = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'event-report';
+
 const toDialPhone = (value?: string | null) => {
   if (!value) return '';
   return value.replace(/[^\d+]/g, '');
@@ -64,6 +100,13 @@ const toDisplayDate = (value: string) => {
   const monthLabel = monthNames[monthIndex];
   if (!monthLabel) return value;
   return `${dd} ${monthLabel} ${yyyy}`;
+};
+
+const toDisplayDateTime = (value?: string | null) => {
+  if (!value) return '-';
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return value;
+  return dt.toLocaleString('en-AU');
 };
 
 const toEventDateTime = (ev: EventRow) => {
@@ -118,6 +161,7 @@ export const AttendancePage = () => {
   const [pendingCheckoutStudent, setPendingCheckoutStudent] = useState<Student | null>(null);
   const [checkoutSignerName, setCheckoutSignerName] = useState('');
   const [msg, setMsg] = useState('');
+  const [exportingEventReport, setExportingEventReport] = useState(false);
   const latestStudentsRequestId = useRef(0);
   const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const signatureDrawingRef = useRef(false);
@@ -305,6 +349,131 @@ export const AttendancePage = () => {
     markStudentAttendanceLocally(studentId, 'checkout');
     setMsg('Check-out saved');
     void loadStudents().catch(() => setMsg('Check-out saved. Student list refresh failed; it will auto-refresh shortly.'));
+  };
+
+  const buildEventReportHtml = (data: EventExportReport) => {
+    const event = data.event;
+    const eventDate = toDisplayDate(event.event_date);
+    const eventTime = `${event.start_time.slice(0, 5)} - ${event.end_time.slice(0, 5)}`;
+    const groupLabel = event.applies_all_groups ? 'All groups' : (event.group_names || []).join(', ') || 'Selected groups';
+    const attendedRows = data.attended.map((row, index) => `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${escapeHtml(row.full_name)}</td>
+        <td>${escapeHtml(row.group_name)}</td>
+        <td>${escapeHtml(toDisplayDateTime(row.checkin_time))}</td>
+        <td>${escapeHtml(toDisplayDateTime(row.checkout_time))}</td>
+        <td>${escapeHtml(row.dropped_by || '-')}</td>
+        <td>${escapeHtml(row.picked_by_name || row.picked_by_type || '-')}</td>
+        <td>${escapeHtml(row.notes || '-')}</td>
+      </tr>
+    `).join('');
+
+    return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(event.name)} - Event Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; color: #202820; margin: 24px; line-height: 1.45; }
+    .toolbar { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+    button { border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 700; background: #0f766e; color: white; }
+    h1 { margin: 0 0 4px; font-size: 26px; }
+    h2 { margin: 24px 0 8px; font-size: 18px; border-bottom: 1px solid #d7ddd1; padding-bottom: 6px; }
+    .meta { color: #5f665f; margin: 0 0 18px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 18px; }
+    .item strong { display: block; font-size: 12px; text-transform: uppercase; color: #5f665f; }
+    .box { border: 1px solid #d7ddd1; border-radius: 8px; padding: 12px; white-space: pre-wrap; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+    th, td { text-align: left; border-bottom: 1px solid #d7ddd1; padding: 8px 6px; vertical-align: top; }
+    th { background: #eef4ea; }
+    @media print {
+      body { margin: 12mm; }
+      .toolbar { display: none; }
+      h2 { break-after: avoid; }
+      tr { break-inside: avoid; }
+    }
+    @media (max-width: 700px) {
+      body { margin: 14px; }
+      .grid { grid-template-columns: 1fr; }
+      table { font-size: 12px; }
+      th, td { padding: 6px 4px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar"><button onclick="window.print()">Print / Save PDF</button></div>
+  <h1>${escapeHtml(event.name)}</h1>
+  <p class="meta">Event report exported ${escapeHtml(new Date().toLocaleString('en-AU'))}</p>
+
+  <h2>Event Details</h2>
+  <div class="grid">
+    <div class="item"><strong>Date</strong>${escapeHtml(eventDate)}</div>
+    <div class="item"><strong>Time</strong>${escapeHtml(eventTime)}</div>
+    <div class="item"><strong>Mode</strong>${event.attendance_mode === 'checkin_only' ? 'Check-in only' : 'Full check-in and check-out'}</div>
+    <div class="item"><strong>Groups</strong>${escapeHtml(groupLabel)}</div>
+  </div>
+  ${event.notes ? `<h2>Event Notes</h2><div class="box">${escapeHtml(event.notes)}</div>` : ''}
+
+  <h2>Event Report</h2>
+  ${data.report ? `
+    <div class="box">${escapeHtml(data.report.taught_summary)}</div>
+    ${data.report.other_notes ? `<h2>Other Notes</h2><div class="box">${escapeHtml(data.report.other_notes)}</div>` : ''}
+    <p class="meta">Submitted by ${escapeHtml(data.report.submitted_by_name || 'Unknown')} on ${escapeHtml(toDisplayDateTime(data.report.updated_at || data.report.submitted_at))}</p>
+  ` : '<p class="meta">No event report submitted.</p>'}
+
+  <h2>Attended (${data.attended.length})</h2>
+  ${data.attended.length ? `
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Student</th>
+          <th>Group</th>
+          <th>Check In</th>
+          <th>Check Out</th>
+          <th>Dropped By</th>
+          <th>Picked By</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>${attendedRows}</tbody>
+    </table>
+  ` : '<p class="meta">No attended students.</p>'}
+</body>
+</html>`;
+  };
+
+  const exportEventReport = async () => {
+    if (!token || !selectedEventId || !selectedEvent || exportingEventReport) return;
+
+    const reportWindow = window.open('', '_blank');
+    if (!reportWindow) {
+      setMsg('Please allow pop-ups to export the event report.');
+      return;
+    }
+
+    reportWindow.document.write('<p style="font-family: Arial, sans-serif; padding: 16px;">Preparing event report...</p>');
+    setExportingEventReport(true);
+    setMsg('');
+    try {
+      const data = await apiFetch<EventExportReport>(`/events/${selectedEventId}/export-report`, {}, token);
+      reportWindow.document.open();
+      reportWindow.document.write(buildEventReportHtml(data));
+      reportWindow.document.close();
+      reportWindow.document.title = `${toFileSafeName(data.event.name)}-${toDateOnly(data.event.event_date)}`;
+      reportWindow.focus();
+      setMsg('Event report ready');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to export event report';
+      reportWindow.document.open();
+      reportWindow.document.write(`<p style="font-family: Arial, sans-serif; padding: 16px;">${escapeHtml(message)}</p>`);
+      reportWindow.document.close();
+      setMsg(message);
+    } finally {
+      setExportingEventReport(false);
+    }
   };
 
   const clearSignatureCanvas = () => {
@@ -580,6 +749,13 @@ export const AttendancePage = () => {
             value={queryInput}
             onChange={(e) => setQueryInput(e.target.value)}
           />
+          <button
+            className="btn ghost attendance-export-btn"
+            disabled={!selectedEventId || exportingEventReport}
+            onClick={() => void exportEventReport()}
+          >
+            {exportingEventReport ? 'Exporting...' : 'Export Report'}
+          </button>
         </div>
         {msg && <p className="ok">{msg}</p>}
       </div>
