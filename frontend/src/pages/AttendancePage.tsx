@@ -87,7 +87,7 @@ const toShortSchoolYear = (value?: string | null) => {
 const toShortName = (fullName: string) => {
   const parts = fullName.trim().split(/\s+/);
   if (parts.length === 1) return parts[0];
-  if (parts.length > 1) return `${parts[0]} ${parts[1][0]}.`;
+  if (parts.length > 1) return `${parts[0]} ${parts[parts.length - 1][0]}.`;
   return fullName;
 };
 
@@ -376,21 +376,86 @@ export const AttendancePage = () => {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(event.name)} - Event Report</title>
   <style>
-    body { font-family: Arial, sans-serif; color: #202820; margin: 24px; line-height: 1.45; }
+    :root {
+      color-scheme: light;
+      --brand-a: #0f766e;
+      --brand-b: #164e63;
+      --paper: #ffffff;
+      --muted-bg: #f2f8f6;
+      --line: #d7ddd1;
+    }
+    * {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      color: #202820;
+      margin: 24px;
+      line-height: 1.45;
+      background: radial-gradient(circle at top right, #d9efe7, #f4f6f1 42%);
+    }
+    .report-shell {
+      max-width: 1100px;
+      margin: 0 auto;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 20px;
+      box-shadow: 0 10px 28px rgba(15, 70, 60, 0.12);
+    }
+    .hero {
+      background: linear-gradient(135deg, var(--brand-a), var(--brand-b));
+      color: #ffffff;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
     .toolbar { display: flex; justify-content: flex-end; margin-bottom: 16px; }
     button { border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 700; background: #0f766e; color: white; }
     h1 { margin: 0 0 4px; font-size: 26px; }
-    h2 { margin: 24px 0 8px; font-size: 18px; border-bottom: 1px solid #d7ddd1; padding-bottom: 6px; }
+    h2 {
+      margin: 24px 0 8px;
+      font-size: 18px;
+      border-bottom: 1px solid #d7ddd1;
+      padding-bottom: 6px;
+      color: #114b57;
+    }
     .meta { color: #5f665f; margin: 0 0 18px; }
+    .hero .meta { color: #e7f5f1; margin: 0; }
     .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 18px; }
-    .item strong { display: block; font-size: 12px; text-transform: uppercase; color: #5f665f; }
-    .box { border: 1px solid #d7ddd1; border-radius: 8px; padding: 12px; white-space: pre-wrap; }
+    .item {
+      background: var(--muted-bg);
+      border: 1px solid #dce8e3;
+      border-radius: 8px;
+      padding: 10px;
+    }
+    .item strong { display: block; font-size: 12px; text-transform: uppercase; color: #3f6d66; }
+    .box {
+      border: 1px solid #d7ddd1;
+      border-radius: 8px;
+      padding: 12px;
+      white-space: pre-wrap;
+      background: #f8fbf6;
+    }
     table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
     th, td { text-align: left; border-bottom: 1px solid #d7ddd1; padding: 8px 6px; vertical-align: top; }
-    th { background: #eef4ea; }
+    th {
+      background: #dff1ed;
+      color: #0f5c55;
+      font-weight: 700;
+    }
+    tbody tr:nth-child(even) { background: #f7fbfa; }
     @media print {
       body { margin: 12mm; }
       .toolbar { display: none; }
+      .report-shell {
+        box-shadow: none;
+        border-color: #d7ddd1;
+      }
+      th { background: #dff1ed !important; }
+      .box { background: #f8fbf6 !important; }
+      .item { background: #f2f8f6 !important; }
       h2 { break-after: avoid; }
       tr { break-inside: avoid; }
     }
@@ -404,8 +469,11 @@ export const AttendancePage = () => {
 </head>
 <body>
   <div class="toolbar"><button onclick="window.print()">Print / Save PDF</button></div>
-  <h1>${escapeHtml(event.name)}</h1>
-  <p class="meta">Event report exported ${escapeHtml(new Date().toLocaleString('en-AU'))}</p>
+  <main class="report-shell">
+  <section class="hero">
+    <h1>${escapeHtml(event.name)}</h1>
+    <p class="meta">Event report exported ${escapeHtml(new Date().toLocaleString('en-AU'))}</p>
+  </section>
 
   <h2>Event Details</h2>
   <div class="grid">
@@ -441,6 +509,7 @@ export const AttendancePage = () => {
       <tbody>${attendedRows}</tbody>
     </table>
   ` : '<p class="meta">No attended students.</p>'}
+  </main>
 </body>
 </html>`;
   };
