@@ -353,19 +353,25 @@ export const AttendancePage = () => {
 
   const buildEventReportHtml = (data: EventExportReport) => {
     const event = data.event;
+    const isCheckinOnly = event.attendance_mode === 'checkin_only';
     const eventDate = toDisplayDate(event.event_date);
     const eventTime = `${event.start_time.slice(0, 5)} - ${event.end_time.slice(0, 5)}`;
     const groupLabel = event.applies_all_groups ? 'All groups' : (event.group_names || []).join(', ') || 'Selected groups';
-    const attendedRows = data.attended.map((row, index) => `
+    const attendedRowsData = isCheckinOnly
+      ? [...data.attended].sort((a, b) => a.full_name.localeCompare(b.full_name, 'en-AU', { sensitivity: 'base' }))
+      : data.attended;
+    const attendedRows = attendedRowsData.map((row, index) => `
       <tr>
         <td>${index + 1}</td>
         <td>${escapeHtml(row.full_name)}</td>
         <td>${escapeHtml(row.group_name)}</td>
+        ${isCheckinOnly ? '' : `
         <td>${escapeHtml(toDisplayDateTime(row.checkin_time))}</td>
         <td>${escapeHtml(toDisplayDateTime(row.checkout_time))}</td>
         <td>${escapeHtml(row.dropped_by || '-')}</td>
         <td>${escapeHtml(row.picked_by_name || row.picked_by_type || '-')}</td>
         <td>${escapeHtml(row.notes || '-')}</td>
+        `}
       </tr>
     `).join('');
 
@@ -499,11 +505,13 @@ export const AttendancePage = () => {
           <th>#</th>
           <th>Student</th>
           <th>Group</th>
+          ${isCheckinOnly ? '' : `
           <th>Check In</th>
           <th>Check Out</th>
           <th>Dropped By</th>
           <th>Picked By</th>
           <th>Notes</th>
+          `}
         </tr>
       </thead>
       <tbody>${attendedRows}</tbody>
@@ -515,31 +523,18 @@ export const AttendancePage = () => {
   };
 
   const exportEventReport = async () => {
-    if (!token || !selectedEventId || !selectedEvent || exportingEventReport) return;
+    if (!selectedEventId || !selectedEvent || exportingEventReport) return;
 
-    const reportWindow = window.open('', '_blank');
-    if (!reportWindow) {
-      setMsg('Please allow pop-ups to export the event report.');
-      return;
-    }
-
-    reportWindow.document.write('<p style="font-family: Arial, sans-serif; padding: 16px;">Preparing event report...</p>');
+    const publicUrl = `${window.location.origin}/public/report/${selectedEventId}`;
     setExportingEventReport(true);
     setMsg('');
     try {
-      const data = await apiFetch<EventExportReport>(`/events/${selectedEventId}/export-report`, {}, token);
-      reportWindow.document.open();
-      reportWindow.document.write(buildEventReportHtml(data));
-      reportWindow.document.close();
-      reportWindow.document.title = `${toFileSafeName(data.event.name)}-${toDateOnly(data.event.event_date)}`;
-      reportWindow.focus();
-      setMsg('Event report ready');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to export event report';
-      reportWindow.document.open();
-      reportWindow.document.write(`<p style="font-family: Arial, sans-serif; padding: 16px;">${escapeHtml(message)}</p>`);
-      reportWindow.document.close();
-      setMsg(message);
+      const reportWindow = window.open(publicUrl, '_blank');
+      if (!reportWindow) {
+        setMsg('Please allow pop-ups to open the report.');
+        return;
+      }
+      setMsg('Event report opened');
     } finally {
       setExportingEventReport(false);
     }
@@ -823,7 +818,7 @@ export const AttendancePage = () => {
             disabled={!selectedEventId || exportingEventReport}
             onClick={() => void exportEventReport()}
           >
-            {exportingEventReport ? 'Exporting...' : 'Export Report'}
+            {exportingEventReport ? 'Opening...' : 'Open Report'}
           </button>
         </div>
         {msg && <p className="ok">{msg}</p>}

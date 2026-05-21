@@ -10,11 +10,13 @@ import { DashboardPage } from './pages/DashboardPage';
 import { EventsPage } from './pages/EventsPage';
 import { VolunteersPage } from './pages/VolunteersPage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
+import { PublicEventReportPage } from './pages/PublicEventReportPage';
 
 function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/public/report/:eventId" element={<PublicEventReportPage />} />
 
       <Route
         path="/"

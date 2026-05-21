@@ -13,6 +13,7 @@ import {
   eventExportReportHandler,
   getEventReportHandler,
   listEventsHandler,
+  publicEventExportReportHandler,
   upsertEventReportHandler,
   updateEventHandler
 } from '../controllers/event.controller.js';
@@ -45,6 +46,7 @@ router.post('/auth/reset-password', resetPasswordHandler);
 
 // Route to send a test email
 router.post('/auth/send-test-email', sendTestEmailHandler);
+router.get('/public/events/:eventId/export-report', publicEventExportReportHandler);
 
 router.get('/students', requireAuth, requireRole('admin', 'teacher'), listStudentsHandler);
 router.get('/groups', requireAuth, requireRole('admin', 'teacher'), listGroupsHandler);

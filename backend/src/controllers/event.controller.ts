@@ -226,14 +226,10 @@ export const eventAttendanceHandler = async (req: Request, res: Response) => {
   return res.json(result.rows);
 };
 
-export const eventExportReportHandler = async (req: Request, res: Response) => {
-  const eventId = String(req.params.eventId || '');
-  const values = [eventId];
-  let teacherAccessSql = '';
-
-  if (req.user?.role === 'teacher') {
-    values.push(req.user.id);
-    teacherAccessSql = `
+const fetchEventExportReportData = async (eventId: string, teacherId?: string) => {
+  const values = teacherId ? [eventId, teacherId] : [eventId];
+  const teacherAccessSql = teacherId
+    ? `
       AND (
         NOT EXISTS (SELECT 1 FROM teacher_groups tg WHERE tg.teacher_id = $2)
         OR e.applies_all_groups = true
@@ -245,8 +241,8 @@ export const eventExportReportHandler = async (req: Request, res: Response) => {
             AND tg.teacher_id = $2
         )
       )
-    `;
-  }
+    `
+    : '';
 
   const eventResult = await pool.query(
     `SELECT
@@ -273,7 +269,7 @@ export const eventExportReportHandler = async (req: Request, res: Response) => {
      LIMIT 1`,
     values
   );
-  if (!eventResult.rowCount) return res.status(404).json({ message: 'Event not found' });
+  if (!eventResult.rowCount) return null;
 
   const reportResult = await pool.query(
     `SELECT
@@ -318,11 +314,30 @@ export const eventExportReportHandler = async (req: Request, res: Response) => {
     [eventId]
   );
 
-  return res.json({
+  return {
     event: eventResult.rows[0],
     report: reportResult.rows[0] || null,
     attended: attendanceResult.rows
-  });
+  };
+};
+
+export const eventExportReportHandler = async (req: Request, res: Response) => {
+  const eventId = String(req.params.eventId || '');
+  const data = await fetchEventExportReportData(
+    eventId,
+    req.user?.role === 'teacher' ? req.user.id : undefined
+  );
+  if (!data) return res.status(404).json({ message: 'Event not found' });
+
+  return res.json(data);
+};
+
+export const publicEventExportReportHandler = async (req: Request, res: Response) => {
+  const eventId = String(req.params.eventId || '');
+  const data = await fetchEventExportReportData(eventId);
+  if (!data) return res.status(404).json({ message: 'Event not found' });
+
+  return res.json(data);
 };
 
 export const getEventReportHandler = async (req: Request, res: Response) => {
