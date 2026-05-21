@@ -14,7 +14,8 @@ export const apiFetch = async <T>(path: string, options: RequestInit = {}, token
   if (!res.ok) {
     const body = await res.json().catch(() => ({ message: 'Request failed' }));
     const message = body.message || 'Request failed';
-    if (res.status === 401 && typeof message === 'string' && message.toLowerCase().includes('session expired')) {
+    const isAuthEndpoint = path.startsWith('/auth/login') || path.startsWith('/auth/forgot-password') || path.startsWith('/auth/reset-password');
+    if (res.status === 401 && !isAuthEndpoint) {
       window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, { detail: { message } }));
     }
     throw new Error(message);
