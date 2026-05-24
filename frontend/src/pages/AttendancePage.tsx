@@ -115,6 +115,20 @@ const toEventDateTime = (ev: EventRow) => {
   return Number.isNaN(dt.getTime()) ? null : dt;
 };
 
+const toEventDateOnly = (value: string) => value.includes('T') ? value.slice(0, 10) : value;
+
+const isWithinLastWeekIncludingToday = (eventDate: string) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const weekStart = new Date(today);
+  weekStart.setDate(weekStart.getDate() - 6);
+
+  const d = new Date(`${toEventDateOnly(eventDate)}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return false;
+  return d >= weekStart && d <= today;
+};
+
 const getDefaultEventId = (rows: EventRow[]) => {
   if (!rows.length) return '';
   const today = new Date().toISOString().slice(0, 10);
@@ -143,7 +157,7 @@ const getDefaultEventId = (rows: EventRow[]) => {
 };
 
 export const AttendancePage = () => {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [queryInput, setQueryInput] = useState('');
   const [query, setQuery] = useState('');
   const [students, setStudents] = useState<Student[]>([]);
@@ -162,12 +176,32 @@ export const AttendancePage = () => {
   const [checkoutSignerName, setCheckoutSignerName] = useState('');
   const [msg, setMsg] = useState('');
   const [exportingEventReport, setExportingEventReport] = useState(false);
+  const [requiresSignature, setRequiresSignature] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(any-pointer: coarse)').matches;
+  });
   const latestStudentsRequestId = useRef(0);
   const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const signatureDrawingRef = useRef(false);
   const signatureHasStrokeRef = useRef(false);
-  const selectedEvent = events.find((e) => e.id === selectedEventId);
+  const attendanceEvents = useMemo(() => {
+    if (user?.role === 'teacher' && requiresSignature) {
+      return events.filter((ev) => isWithinLastWeekIncludingToday(ev.event_date));
+    }
+    return events;
+  }, [events, user?.role, requiresSignature]);
+  const selectedEvent = attendanceEvents.find((e) => e.id === selectedEventId);
   const isCheckinOnlyEvent = selectedEvent?.attendance_mode === 'checkin_only';
+
+  useEffect(() => {
+    const updateSignatureMode = () => {
+      setRequiresSignature(window.matchMedia('(any-pointer: coarse)').matches);
+    };
+
+    updateSignatureMode();
+    window.addEventListener('resize', updateSignatureMode);
+    return () => window.removeEventListener('resize', updateSignatureMode);
+  }, []);
 
   const filteredGroups = useMemo(() => {
     if (!selectedEvent || selectedEvent.applies_all_groups) {
@@ -222,6 +256,17 @@ export const AttendancePage = () => {
     loadEvents().catch(() => setMsg('Failed to load events'));
     loadGroups().catch(() => setMsg('Failed to load groups'));
   }, [token]);
+
+  useEffect(() => {
+    if (!attendanceEvents.length) {
+      if (selectedEventId) setSelectedEventId('');
+      return;
+    }
+
+    if (!selectedEventId || !attendanceEvents.some((e) => e.id === selectedEventId)) {
+      setSelectedEventId(getDefaultEventId(attendanceEvents));
+    }
+  }, [attendanceEvents, selectedEventId]);
 
   useEffect(() => {
     if (!token) return;
@@ -754,36 +799,60 @@ export const AttendancePage = () => {
     }
   };
 
-  const handleMobileAttendanceAction = async (student: Student) => {
+  const handleAttendanceAction = async (student: Student) => {
     if (!selectedEventId || submittingStudentId) return;
-    if (attendanceTab === 'checkin') {
-      if (isCheckinOnlyEvent) {
-        setSubmittingStudentId(student.id);
-        try {
-          await checkIn(student.id);
-        } catch (err) {
-          let errorMsg = 'Attendance update failed';
-          if (err && typeof err === 'object') {
-            if ('message' in err && typeof err.message === 'string') {
-              errorMsg = err.message;
-            } else if (err instanceof Error) {
-              errorMsg = err.message;
-            }
-          }
-          setMsg(errorMsg);
-          // eslint-disable-next-line no-console
-          console.error('Check-in error:', err);
-        } finally {
-          setSubmittingStudentId(null);
-        }
+    if (attendanceTab === 'attended') return;
+
+    if (requiresSignature) {
+      if (attendanceTab === 'checkin') {
+        openCheckinSignatureDialog(student);
         return;
       }
 
-      openCheckinSignatureDialog(student);
+      openCheckoutSignatureDialog(student);
       return;
     }
 
-    openCheckoutSignatureDialog(student);
+    if (attendanceTab === 'checkin') {
+      setSubmittingStudentId(student.id);
+      try {
+        await checkIn(student.id);
+      } catch (err) {
+        let errorMsg = 'Attendance update failed';
+        if (err && typeof err === 'object') {
+          if ('message' in err && typeof err.message === 'string') {
+            errorMsg = err.message;
+          } else if (err instanceof Error) {
+            errorMsg = err.message;
+          }
+        }
+        setMsg(errorMsg);
+        // eslint-disable-next-line no-console
+        console.error('Check-in error:', err);
+      } finally {
+        setSubmittingStudentId(null);
+      }
+      return;
+    }
+
+    setSubmittingStudentId(student.id);
+    try {
+      await checkOut(student.id);
+    } catch (err) {
+      let errorMsg = 'Attendance update failed';
+      if (err && typeof err === 'object') {
+        if ('message' in err && typeof err.message === 'string') {
+          errorMsg = err.message;
+        } else if (err instanceof Error) {
+          errorMsg = err.message;
+        }
+      }
+      setMsg(errorMsg);
+      // eslint-disable-next-line no-console
+      console.error('Check-out error:', err);
+    } finally {
+      setSubmittingStudentId(null);
+    }
   };
 
   return (
@@ -793,7 +862,7 @@ export const AttendancePage = () => {
         <div className="row wrap attendance-filters-row">
           <select className="attendance-filter-control" value={selectedEventId} onChange={(e) => setSelectedEventId(e.target.value)}>
             <option value="">Select event</option>
-            {events.map((ev) => (
+            {attendanceEvents.map((ev) => (
               <option key={ev.id} value={ev.id}>
                 {ev.name} ({toDisplayDate(ev.event_date)} {ev.start_time.slice(0, 5)}-{ev.end_time.slice(0, 5)})
               </option>
@@ -860,9 +929,21 @@ export const AttendancePage = () => {
                   <a className="btn ghost contact-btn" href={`https://wa.me/${toWhatsAppPhone(student.mobile_number)}`} target="_blank" rel="noreferrer">WhatsApp</a>
                 )}
                 {attendanceTab === 'checkin' ? (
-                  <button className="btn success" disabled={!selectedEventId} onClick={() => checkIn(student.id)}>Check In</button>
+                  <button
+                    className="btn success"
+                    disabled={!selectedEventId || submittingStudentId === student.id}
+                    onClick={() => void handleAttendanceAction(student)}
+                  >
+                    {submittingStudentId === student.id ? 'Saving...' : 'Check In'}
+                  </button>
                 ) : attendanceTab === 'checkout' ? (
-                  <button className="btn warn" disabled={!selectedEventId} onClick={() => checkOut(student.id)}>Check Out</button>
+                  <button
+                    className="btn warn"
+                    disabled={!selectedEventId || submittingStudentId === student.id}
+                    onClick={() => void handleAttendanceAction(student)}
+                  >
+                    {submittingStudentId === student.id ? 'Saving...' : 'Check Out'}
+                  </button>
                 ) : (
                   <>
                     <span className="eyebrow" style={{ alignSelf: 'center', marginRight: 8 }}>
@@ -900,7 +981,7 @@ export const AttendancePage = () => {
                     type="button"
                     className={`btn attendance-mobile-inline-action ${submittingStudentId === student.id ? 'saving' : 'success'}`}
                     disabled={!selectedEventId || submittingStudentId === student.id}
-                    onClick={() => void handleMobileAttendanceAction(student)}
+                    onClick={() => void handleAttendanceAction(student)}
                   >
                     {submittingStudentId === student.id ? 'Saving...' : 'Check In'}
                   </button>
@@ -909,7 +990,7 @@ export const AttendancePage = () => {
                     type="button"
                     className={`btn attendance-mobile-inline-action ${submittingStudentId === student.id ? 'saving' : 'warn'}`}
                     disabled={!selectedEventId || submittingStudentId === student.id}
-                    onClick={() => void handleMobileAttendanceAction(student)}
+                    onClick={() => void handleAttendanceAction(student)}
                   >
                     {submittingStudentId === student.id ? 'Saving...' : 'Check Out'}
                   </button>
