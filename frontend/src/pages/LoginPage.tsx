@@ -9,7 +9,7 @@ export const LoginPage = () => {
   const [searchParams] = useSearchParams();
   const resetToken = searchParams.get('resetToken') || '';
   const [email, setEmail] = useState('abhishekchouhan@gmail.com');
-  const [password, setPassword] = useState('Admin@123');
+  const [password, setPassword] = useState('hk@123');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
