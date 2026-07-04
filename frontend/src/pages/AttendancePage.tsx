@@ -117,6 +117,13 @@ const toEventDateTime = (ev: EventRow) => {
 
 const toEventDateOnly = (value: string) => value.includes('T') ? value.slice(0, 10) : value;
 
+const toLocalDateKey = (value = new Date()) => {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const isWithinLastWeekIncludingToday = (eventDate: string) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -131,10 +138,10 @@ const isWithinLastWeekIncludingToday = (eventDate: string) => {
 
 const getDefaultEventId = (rows: EventRow[]) => {
   if (!rows.length) return '';
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toLocalDateKey();
 
   const todaysEvents = rows
-    .filter((ev) => ev.event_date === today)
+    .filter((ev) => toEventDateOnly(ev.event_date) === today)
     .sort((a, b) => {
       const aTime = toEventDateTime(a)?.getTime() ?? Number.MAX_SAFE_INTEGER;
       const bTime = toEventDateTime(b)?.getTime() ?? Number.MAX_SAFE_INTEGER;
@@ -146,7 +153,7 @@ const getDefaultEventId = (rows: EventRow[]) => {
   }
 
   const upcomingEvents = rows
-    .filter((ev) => ev.event_date > today)
+    .filter((ev) => toEventDateOnly(ev.event_date) > today)
     .sort((a, b) => {
       const aTime = toEventDateTime(a)?.getTime() ?? Number.MAX_SAFE_INTEGER;
       const bTime = toEventDateTime(b)?.getTime() ?? Number.MAX_SAFE_INTEGER;
